@@ -1,6 +1,7 @@
 
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
 import SidebarLayout from "@/components/layouts/SidebarLayout";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,125 +15,160 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
-// Mock data type for a cohort
+// Type definitions for the data structure
+interface Creative {
+  id: string;
+  headline: string;
+  description: string;
+  cta: string;
+  image_prompt: string | null;
+  image_url: string | null;
+}
+
 interface Cohort {
   id: string;
   title: string;
   description: string;
-  demographics: string[];
-  cta: string;
-  headline: string;
-  copy: string;
-  imagePrompt: string;
-  imageUrl: string;
+  demographics: string;
+  recommended_channels: string[] | null;
+  creatives: Creative[];
 }
 
-// Mock data type for a campaign
 interface Campaign {
   id: string;
   title: string;
-  description: string;
-  createdAt: string;
-  status: "draft" | "active" | "completed" | "archived";
-  channel: string;
-  contentType: string;
-  budget: string;
+  prompt: string;
+  budget: string | null;
+  primary_channel: string;
+  content_type: string;
+  status: string;
   cohorts: Cohort[];
 }
 
 const CampaignReview = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [activeTab, setActiveTab] = useState("overview");
   const [editingPrompt, setEditingPrompt] = useState<{ cohortId: string; value: string } | null>(null);
+  const [generatingImages, setGeneratingImages] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    // Fetch campaign - in a real app, this would call Supabase
-    const fetchCampaign = async () => {
-      try {
-        // Simulate API delay
-        await new Promise((resolve) => setTimeout(resolve, 1500));
-
-        // Mock data - in a real app, this would come from Supabase
-        // Generate cohorts based on the campaign ID to ensure they're different for each campaign
-        const mockCohorts: Cohort[] = [
-          {
-            id: `cohort_1_${id}`,
-            title: "Adventure-Seeking Professionals",
-            description: "Young professionals who prioritize unique travel experiences",
-            demographics: ["25-34 years", "Urban", "Income $75k+", "Tech-savvy"],
-            cta: "Book Your Adventure",
-            headline: "Escape the Ordinary",
-            copy: "Discover breathtaking destinations with our exclusive monsoon packages designed for the bold explorer in you.",
-            imagePrompt: "A young professional standing on a mountain peak during monsoon, overlooking a misty valley with rays of sunshine breaking through clouds",
-            imageUrl: "https://replicate.delivery/pbxt/GXyHyQLHSnJ7wCQCMVXaGnKJkEh2OiPfO7qdZxAUmn9vw4TIA/out-0.png",
-          },
-          {
-            id: `cohort_2_${id}`,
-            title: "Family Memory Makers",
-            description: "Parents looking to create lasting family memories through travel",
-            demographics: ["30-45 years", "Suburban", "Parents of young children", "Value-conscious"],
-            cta: "Create Family Memories",
-            headline: "Moments That Last a Lifetime",
-            copy: "Our family-friendly monsoon packages combine adventure and comfort, perfect for creating stories your children will tell for years to come.",
-            imagePrompt: "A happy family with children playing in light rain, laughing under colorful umbrellas in a lush green resort setting",
-            imageUrl: "https://replicate.delivery/pbxt/JeQHHkTQSqMQjcNZqyGmgLFKLQPy6Jkpk10Inuj7OqkTnTHE/out-0.png",
-          },
-          {
-            id: `cohort_3_${id}`,
-            title: "Luxury Relaxation Seekers",
-            description: "Affluent individuals seeking premium relaxation experiences",
-            demographics: ["35-60 years", "High-income", "Urban professionals", "Luxury-oriented"],
-            cta: "Indulge in Luxury",
-            headline: "Monsoon Serenity Awaits",
-            copy: "Experience the magic of monsoon from the comfort of our premium accommodations, where every detail is crafted for your ultimate relaxation.",
-            imagePrompt: "A luxurious infinity pool overlooking rainforest during gentle monsoon rain, with a covered area where someone is enjoying a spa treatment",
-            imageUrl: "https://replicate.delivery/pbxt/4NyfW7fU3PeECxqYUFh9GHEgWgkQnplQoRQEWbTHZbgg8TIA/out-0.png",
-          },
-        ];
-
-        const mockCampaign: Campaign = {
-          id: id || "unknown",
-          title: "Monsoon Travel Promotion",
-          description: "Promote monsoon travel packages for young professionals aged 25-35 who live in urban areas",
-          createdAt: new Date().toISOString(),
-          status: "draft",
-          channel: "social",
-          contentType: "image",
-          budget: "$5,000",
-          cohorts: mockCohorts,
-        };
-
-        setCampaign(mockCampaign);
-      } catch (error) {
-        console.error("Error fetching campaign:", error);
-        toast.error("Failed to load campaign details");
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    if (id) {
-      fetchCampaign();
-    } else {
+    if (!user || !id) {
       setIsLoading(false);
-      toast.error("Campaign ID not provided");
-      navigate("/dashboard");
+      if (!user) navigate("/login");
+      else if (!id) navigate("/dashboard");
+      return;
     }
-  }, [id, navigate]);
+
+    fetchCampaignData();
+  }, [id, user, navigate]);
+
+  const fetchCampaignData = async () => {
+    try {
+      setIsLoading(true);
+
+      // Fetch the campaign data
+      const { data: campaignData, error: campaignError } = await supabase
+        .from("campaigns")
+        .select("*")
+        .eq("id", id)
+        .eq("user_id", user?.id)
+        .single();
+
+      if (campaignError || !campaignData) {
+        console.error("Error fetching campaign:", campaignError);
+        toast.error("Failed to load campaign");
+        navigate("/dashboard");
+        return;
+      }
+
+      // Fetch the micro-cohorts for this campaign
+      const { data: cohortsData, error: cohortsError } = await supabase
+        .from("micro_cohorts")
+        .select("*")
+        .eq("campaign_id", campaignData.id);
+
+      if (cohortsError) {
+        console.error("Error fetching cohorts:", cohortsError);
+        toast.error("Failed to load campaign cohorts");
+        return;
+      }
+
+      const cohorts: Cohort[] = [];
+
+      // For each cohort, fetch its creatives
+      for (const cohort of cohortsData) {
+        const { data: creativesData, error: creativesError } = await supabase
+          .from("campaign_creatives")
+          .select("*")
+          .eq("cohort_id", cohort.id);
+
+        if (creativesError) {
+          console.error("Error fetching creatives for cohort:", cohort.id, creativesError);
+          continue;
+        }
+
+        cohorts.push({
+          id: cohort.id,
+          title: cohort.title,
+          description: cohort.description,
+          demographics: cohort.demographics,
+          recommended_channels: cohort.recommended_channels,
+          creatives: creativesData
+        });
+
+        // Generate images for creatives that don't have images yet
+        for (const creative of creativesData) {
+          if (creative.image_prompt && !creative.image_url) {
+            generateImage(creative.id, creative.image_prompt);
+          }
+        }
+      }
+
+      // Build the complete campaign object
+      const completeData: Campaign = {
+        id: campaignData.id,
+        title: campaignData.title,
+        prompt: campaignData.prompt,
+        budget: campaignData.budget,
+        primary_channel: campaignData.primary_channel,
+        content_type: campaignData.content_type,
+        status: campaignData.status,
+        cohorts: cohorts
+      };
+
+      setCampaign(completeData);
+    } catch (error) {
+      console.error("Error loading campaign data:", error);
+      toast.error("Failed to load campaign details");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleSaveCampaign = async () => {
+    if (!campaign) return;
+    
     try {
       setIsSaving(true);
-      // In a real app, this would call Supabase
-      console.log("Saving campaign:", campaign);
       
-      // Simulate API delay
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      // Update campaign status to active
+      const { error } = await supabase
+        .from("campaigns")
+        .update({ status: "active" })
+        .eq("id", campaign.id);
+        
+      if (error) {
+        console.error("Error saving campaign:", error);
+        toast.error("Failed to save campaign");
+        return;
+      }
       
       toast.success("Campaign saved successfully!");
       navigate("/dashboard");
@@ -144,71 +180,115 @@ const CampaignReview = () => {
     }
   };
 
-  const handleGenerateNewImage = async (cohortId: string, prompt: string) => {
-    if (!campaign) return;
-    
-    // Find the cohort to update
-    const cohortIndex = campaign.cohorts.findIndex((c) => c.id === cohortId);
-    if (cohortIndex === -1) return;
+  const generateImage = async (creativeId: string, prompt: string) => {
+    if (!prompt) return;
     
     try {
-      // Show loading state
-      const updatedCohorts = [...campaign.cohorts];
-      updatedCohorts[cohortIndex] = {
-        ...updatedCohorts[cohortIndex],
-        imageUrl: "",
-      };
-      setCampaign({ ...campaign, cohorts: updatedCohorts });
+      // Set this creative as generating an image
+      setGeneratingImages(prev => new Set([...prev, creativeId]));
       
-      toast.info("Generating new image...");
+      // Call the edge function to generate the image
+      const { data: imageData, error: imageError } = await supabase.functions.invoke(
+        "generate-image",
+        {
+          body: {
+            prompt,
+            creativeId
+          }
+        }
+      );
       
-      // In a real app, this would call Replicate AI API via Supabase
-      // Simulate API delay
-      await new Promise((resolve) => setTimeout(resolve, 3000));
+      if (imageError) {
+        console.error("Error generating image:", imageError);
+        toast.error("Failed to generate image. Please try again.");
+        return;
+      }
       
-      // Mock new image URL - in a real app, this would come from Replicate
-      const newImageUrl = `https://replicate.delivery/pbxt/${Math.random().toString(36).substring(2, 15)}/out-0.png`;
+      console.log("Generated image:", imageData);
       
-      // Update cohort with new image
-      updatedCohorts[cohortIndex] = {
-        ...updatedCohorts[cohortIndex],
-        imageUrl: newImageUrl,
-      };
-      setCampaign({ ...campaign, cohorts: updatedCohorts });
-      
-      toast.success("New image generated successfully!");
+      // Update the campaign state with the new image URL
+      if (imageData && imageData.imageUrl) {
+        setCampaign(prevCampaign => {
+          if (!prevCampaign) return null;
+          
+          const updatedCohorts = prevCampaign.cohorts.map(cohort => {
+            const updatedCreatives = cohort.creatives.map(creative => {
+              if (creative.id === creativeId) {
+                return { ...creative, image_url: imageData.imageUrl };
+              }
+              return creative;
+            });
+            return { ...cohort, creatives: updatedCreatives };
+          });
+          
+          return { ...prevCampaign, cohorts: updatedCohorts };
+        });
+        
+        toast.success("Image generated successfully!");
+      }
     } catch (error) {
-      console.error("Error generating image:", error);
-      toast.error("Failed to generate new image");
-      
-      // Reset to original image
-      const originalCohort = campaign.cohorts[cohortIndex];
-      const updatedCohorts = [...campaign.cohorts];
-      updatedCohorts[cohortIndex] = originalCohort;
-      setCampaign({ ...campaign, cohorts: updatedCohorts });
+      console.error("Error in image generation:", error);
+      toast.error("Failed to generate image");
+    } finally {
+      // Remove this creative from the generating set
+      setGeneratingImages(prev => {
+        const newSet = new Set([...prev]);
+        newSet.delete(creativeId);
+        return newSet;
+      });
     }
   };
 
-  const startEditingPrompt = (cohortId: string, currentPrompt: string) => {
-    setEditingPrompt({ cohortId, value: currentPrompt });
+  const handleGenerateNewImage = (creativeId: string, prompt: string) => {
+    generateImage(creativeId, prompt);
   };
 
-  const updateImagePrompt = (cohortId: string) => {
+  const startEditingPrompt = (creativeId: string, currentPrompt: string) => {
+    setEditingPrompt({ cohortId: creativeId, value: currentPrompt || "" });
+  };
+
+  const updateImagePrompt = async (creativeId: string) => {
     if (!editingPrompt || !campaign) return;
     
-    const cohortIndex = campaign.cohorts.findIndex((c) => c.id === cohortId);
-    if (cohortIndex === -1) return;
-    
-    const updatedCohorts = [...campaign.cohorts];
-    updatedCohorts[cohortIndex] = {
-      ...updatedCohorts[cohortIndex],
-      imagePrompt: editingPrompt.value,
-    };
-    
-    setCampaign({ ...campaign, cohorts: updatedCohorts });
-    setEditingPrompt(null);
-    
-    toast.success("Image prompt updated");
+    try {
+      // Update the prompt in the database
+      const { error } = await supabase
+        .from("campaign_creatives")
+        .update({ image_prompt: editingPrompt.value })
+        .eq("id", creativeId);
+        
+      if (error) {
+        console.error("Error updating image prompt:", error);
+        toast.error("Failed to update image prompt");
+        return;
+      }
+      
+      // Update the local state
+      setCampaign(prevCampaign => {
+        if (!prevCampaign) return null;
+        
+        const updatedCohorts = prevCampaign.cohorts.map(cohort => {
+          const updatedCreatives = cohort.creatives.map(creative => {
+            if (creative.id === creativeId) {
+              return { ...creative, image_prompt: editingPrompt.value };
+            }
+            return creative;
+          });
+          return { ...cohort, creatives: updatedCreatives };
+        });
+        
+        return { ...prevCampaign, cohorts: updatedCohorts };
+      });
+      
+      setEditingPrompt(null);
+      toast.success("Image prompt updated");
+      
+      // Generate a new image with the updated prompt
+      generateImage(creativeId, editingPrompt.value);
+    } catch (error) {
+      console.error("Error updating image prompt:", error);
+      toast.error("Failed to update image prompt");
+    }
   };
 
   if (isLoading) {
@@ -282,21 +362,21 @@ const CampaignReview = () => {
                 <CardContent className="space-y-4">
                   <div>
                     <h3 className="text-sm font-medium text-gray-500">Description</h3>
-                    <p className="mt-1">{campaign.description}</p>
+                    <p className="mt-1">{campaign.prompt}</p>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <h3 className="text-sm font-medium text-gray-500">Primary Channel</h3>
-                      <p className="mt-1 capitalize">{campaign.channel}</p>
+                      <p className="mt-1 capitalize">{campaign.primary_channel}</p>
                     </div>
                     <div>
                       <h3 className="text-sm font-medium text-gray-500">Content Type</h3>
-                      <p className="mt-1 capitalize">{campaign.contentType}</p>
+                      <p className="mt-1 capitalize">{campaign.content_type}</p>
                     </div>
                   </div>
                   <div>
                     <h3 className="text-sm font-medium text-gray-500">Budget</h3>
-                    <p className="mt-1">{campaign.budget}</p>
+                    <p className="mt-1">{campaign.budget || "Not specified"}</p>
                   </div>
                 </CardContent>
               </Card>
@@ -317,8 +397,8 @@ const CampaignReview = () => {
                   <div>
                     <h3 className="text-sm font-medium text-gray-500">Key Demographics</h3>
                     <ul className="mt-1 list-disc list-inside space-y-1">
-                      {[...new Set(campaign.cohorts.flatMap(c => c.demographics).slice(0, 5))].map((demo, index) => (
-                        <li key={index}>{demo}</li>
+                      {campaign.cohorts.map((cohort, index) => (
+                        <li key={index}>{cohort.demographics.split(',')[0]}</li>
                       ))}
                     </ul>
                   </div>
@@ -338,32 +418,45 @@ const CampaignReview = () => {
             <div className="mt-6">
               <h2 className="text-lg font-medium mb-4">Creative Preview</h2>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {campaign.cohorts.map((cohort) => (
-                  <Card key={cohort.id} className="border shadow-sm overflow-hidden">
-                    <div className="aspect-[4/3] relative bg-gray-100">
-                      {cohort.imageUrl ? (
-                        <img 
-                          src={cohort.imageUrl} 
-                          alt={cohort.title} 
-                          className="object-cover w-full h-full" 
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <div className="w-10 h-10 border-4 border-t-aviation-blue rounded-full animate-spin"></div>
-                        </div>
-                      )}
-                    </div>
-                    <CardContent className="p-4">
-                      <h3 className="font-bold">{cohort.headline}</h3>
-                      <p className="text-sm text-gray-600 mt-1 line-clamp-2">{cohort.copy}</p>
-                      <div className="mt-3">
-                        <span className="inline-block px-3 py-1 bg-aviation-lightBlue text-aviation-blue text-xs font-medium rounded-full">
-                          {cohort.cta}
-                        </span>
+                {campaign.cohorts.flatMap(cohort => 
+                  cohort.creatives.map(creative => (
+                    <Card key={creative.id} className="border shadow-sm overflow-hidden">
+                      <div className="aspect-[4/3] relative bg-gray-100">
+                        {generatingImages.has(creative.id) ? (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <div className="w-10 h-10 border-4 border-t-aviation-blue rounded-full animate-spin"></div>
+                          </div>
+                        ) : creative.image_url ? (
+                          <img 
+                            src={creative.image_url} 
+                            alt={creative.headline} 
+                            className="object-cover w-full h-full" 
+                          />
+                        ) : (
+                          <div className="w-full h-full flex flex-col items-center justify-center p-4">
+                            <p className="text-gray-400 text-center mb-2">Image not yet generated</p>
+                            <Button 
+                              size="sm"
+                              onClick={() => generateImage(creative.id, creative.image_prompt || "")}
+                              disabled={!creative.image_prompt}
+                            >
+                              Generate Image
+                            </Button>
+                          </div>
+                        )}
                       </div>
-                    </CardContent>
-                  </Card>
-                ))}
+                      <CardContent className="p-4">
+                        <h3 className="font-bold">{creative.headline}</h3>
+                        <p className="text-sm text-gray-600 mt-1 line-clamp-2">{creative.description}</p>
+                        <div className="mt-3">
+                          <span className="inline-block px-3 py-1 bg-aviation-lightBlue text-aviation-blue text-xs font-medium rounded-full">
+                            {creative.cta}
+                          </span>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))
+                )}
               </div>
             </div>
           </TabsContent>
@@ -381,106 +474,128 @@ const CampaignReview = () => {
                       <div>
                         <h3 className="text-sm font-medium text-gray-500 mb-2">Demographics</h3>
                         <ul className="list-disc list-inside space-y-1">
-                          {cohort.demographics.map((demo, index) => (
-                            <li key={index} className="text-gray-700">{demo}</li>
+                          {cohort.demographics.split(',').map((demo, index) => (
+                            <li key={index} className="text-gray-700">{demo.trim()}</li>
                           ))}
                         </ul>
                       </div>
                       
                       <div>
-                        <h3 className="text-sm font-medium text-gray-500 mb-2">Creative Copy</h3>
-                        <div className="border rounded-md p-4 bg-white">
-                          <p className="font-bold text-lg mb-2">{cohort.headline}</p>
-                          <p className="text-gray-700">{cohort.copy}</p>
-                          <div className="mt-4">
-                            <span className="inline-block px-3 py-1 bg-aviation-blue/10 text-aviation-blue text-sm font-medium rounded-full">
-                              {cohort.cta}
-                            </span>
-                          </div>
-                        </div>
+                        <h3 className="text-sm font-medium text-gray-500 mb-2">Recommended Channels</h3>
+                        <ul className="list-disc list-inside space-y-1">
+                          {(cohort.recommended_channels || []).map((channel, index) => (
+                            <li key={index} className="text-gray-700">{channel}</li>
+                          ))}
+                        </ul>
                       </div>
                       
-                      <div>
-                        <h3 className="text-sm font-medium text-gray-500 mb-2">Image Prompt</h3>
-                        {editingPrompt && editingPrompt.cohortId === cohort.id ? (
-                          <div className="space-y-2">
-                            <Textarea 
-                              value={editingPrompt.value}
-                              onChange={(e) => setEditingPrompt({ ...editingPrompt, value: e.target.value })}
-                              className="min-h-[80px]"
-                            />
-                            <div className="flex space-x-2">
-                              <Button 
-                                size="sm" 
-                                variant="outline"
-                                onClick={() => setEditingPrompt(null)}
-                              >
-                                Cancel
-                              </Button>
-                              <Button 
-                                size="sm"
-                                className="bg-aviation-blue hover:bg-aviation-indigo"
-                                onClick={() => updateImagePrompt(cohort.id)}
-                              >
-                                Save Prompt
-                              </Button>
+                      {cohort.creatives.map((creative) => (
+                        <div key={creative.id} className="border-t pt-4">
+                          <h3 className="text-sm font-medium text-gray-500 mb-2">Creative Copy</h3>
+                          <div className="border rounded-md p-4 bg-white">
+                            <p className="font-bold text-lg mb-2">{creative.headline}</p>
+                            <p className="text-gray-700">{creative.description}</p>
+                            <div className="mt-4">
+                              <span className="inline-block px-3 py-1 bg-aviation-blue/10 text-aviation-blue text-sm font-medium rounded-full">
+                                {creative.cta}
+                              </span>
                             </div>
                           </div>
-                        ) : (
-                          <div className="border rounded-md p-4 bg-gray-50 relative group">
-                            <p className="text-gray-700 pr-8">{cohort.imagePrompt}</p>
-                            <Button 
-                              size="sm"
-                              variant="ghost"
-                              className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
-                              onClick={() => startEditingPrompt(cohort.id, cohort.imagePrompt)}
-                            >
-                              <svg
-                                xmlns="http://www.w3.org/2000/svg"
-                                width="14"
-                                height="14"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="2"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                className="lucide lucide-pencil"
+                      
+                          <h3 className="text-sm font-medium text-gray-500 mt-4 mb-2">Image Prompt</h3>
+                          {editingPrompt && editingPrompt.cohortId === creative.id ? (
+                            <div className="space-y-2">
+                              <Textarea 
+                                value={editingPrompt.value}
+                                onChange={(e) => setEditingPrompt({ ...editingPrompt, value: e.target.value })}
+                                className="min-h-[80px]"
+                              />
+                              <div className="flex space-x-2">
+                                <Button 
+                                  size="sm" 
+                                  variant="outline"
+                                  onClick={() => setEditingPrompt(null)}
+                                >
+                                  Cancel
+                                </Button>
+                                <Button 
+                                  size="sm"
+                                  className="bg-aviation-blue hover:bg-aviation-indigo"
+                                  onClick={() => updateImagePrompt(creative.id)}
+                                >
+                                  Save & Generate
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="border rounded-md p-4 bg-gray-50 relative group">
+                              <p className="text-gray-700 pr-8">{creative.image_prompt || "No image prompt provided"}</p>
+                              <Button 
+                                size="sm"
+                                variant="ghost"
+                                className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                                onClick={() => startEditingPrompt(creative.id, creative.image_prompt || "")}
                               >
-                                <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
-                                <path d="m15 5 4 4" />
-                              </svg>
-                              <span className="sr-only">Edit</span>
-                            </Button>
+                                <svg
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  width="14"
+                                  height="14"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  className="lucide lucide-pencil"
+                                >
+                                  <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+                                  <path d="m15 5 4 4" />
+                                </svg>
+                                <span className="sr-only">Edit</span>
+                              </Button>
+                            </div>
+                          )}
+                          
+                          <div className="mt-6 space-y-4">
+                            <h3 className="text-sm font-medium text-gray-500 mb-2">Generated Image</h3>
+                            <div className="border rounded-md overflow-hidden bg-gray-100">
+                              {generatingImages.has(creative.id) ? (
+                                <div className="w-full h-64 flex items-center justify-center">
+                                  <div className="w-10 h-10 border-4 border-t-aviation-blue rounded-full animate-spin"></div>
+                                </div>
+                              ) : creative.image_url ? (
+                                <img 
+                                  src={creative.image_url} 
+                                  alt={creative.headline} 
+                                  className="object-contain w-full h-64" 
+                                />
+                              ) : (
+                                <div className="w-full h-64 flex flex-col items-center justify-center">
+                                  <p className="text-gray-400 mb-3">No image generated yet</p>
+                                  <Button
+                                    onClick={() => generateImage(creative.id, creative.image_prompt || "")}
+                                    disabled={!creative.image_prompt || generatingImages.has(creative.id)}
+                                  >
+                                    Generate Image
+                                  </Button>
+                                </div>
+                              )}
+                            </div>
+                            {creative.image_url && (
+                              <div className="flex justify-end space-x-2">
+                                <Button 
+                                  variant="outline" 
+                                  size="sm"
+                                  onClick={() => handleGenerateNewImage(creative.id, creative.image_prompt || "")}
+                                  disabled={!creative.image_prompt || generatingImages.has(creative.id)}
+                                >
+                                  {generatingImages.has(creative.id) ? "Generating..." : "Regenerate Image"}
+                                </Button>
+                              </div>
+                            )}
                           </div>
-                        )}
-                      </div>
-                    </div>
-                    
-                    <div className="space-y-4">
-                      <h3 className="text-sm font-medium text-gray-500 mb-2">Generated Image</h3>
-                      <div className="border rounded-md overflow-hidden bg-gray-100">
-                        {cohort.imageUrl ? (
-                          <img 
-                            src={cohort.imageUrl} 
-                            alt={cohort.title} 
-                            className="object-contain w-full h-64" 
-                          />
-                        ) : (
-                          <div className="w-full h-64 flex items-center justify-center">
-                            <div className="w-10 h-10 border-4 border-t-aviation-blue rounded-full animate-spin"></div>
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex justify-end space-x-2">
-                        <Button 
-                          variant="outline" 
-                          size="sm"
-                          onClick={() => handleGenerateNewImage(cohort.id, cohort.imagePrompt)}
-                        >
-                          Regenerate Image
-                        </Button>
-                      </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 </CardContent>

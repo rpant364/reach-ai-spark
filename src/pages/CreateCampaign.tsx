@@ -1,9 +1,9 @@
-
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useAuth } from "@/contexts/AuthContext";
 import SidebarLayout from "@/components/layouts/SidebarLayout";
 import { Button } from "@/components/ui/button";
 import {
@@ -33,6 +33,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 const formSchema = z.object({
   campaignName: z.string().min(3, { message: "Campaign name must be at least 3 characters" }),
@@ -44,6 +45,7 @@ const formSchema = z.object({
 
 const CreateCampaign = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   
   const form = useForm<z.infer<typeof formSchema>>({
@@ -61,33 +63,107 @@ const CreateCampaign = () => {
     try {
       setIsLoading(true);
       
-      // In a real app, this would call OpenAI API through Supabase Edge Function
-      console.log("Generating campaign with:", values);
+      // First, create a campaign record in the database
+      const { data: campaignData, error: campaignError } = await supabase
+        .from("campaigns")
+        .insert({
+          title: values.campaignName,
+          prompt: values.prompt,
+          budget: values.budget || null,
+          primary_channel: values.primaryChannel,
+          content_type: values.contentType,
+          user_id: user?.id,
+          status: "draft"
+        })
+        .select()
+        .single();
       
-      // Mock API call delay
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      if (campaignError) {
+        console.error("Error creating campaign:", campaignError);
+        toast.error("Failed to create campaign");
+        setIsLoading(false);
+        return;
+      }
       
-      // Generate a random campaign ID
-      const campaignId = `camp_${Math.random().toString(36).substr(2, 9)}`;
+      // Call the generate-campaign Edge Function to generate content
+      const { data: generationData, error: generationError } = await supabase.functions.invoke(
+        "generate-campaign",
+        {
+          body: {
+            campaignId: campaignData.id,
+            prompt: values.prompt,
+            primaryChannel: values.primaryChannel,
+            contentType: values.contentType,
+            budget: values.budget || "Not specified"
+          }
+        }
+      );
       
-      // Store in localStorage for demo purposes
-      const campaigns = JSON.parse(localStorage.getItem('campaigns') || '[]');
-      campaigns.push({
-        id: campaignId,
-        title: values.campaignName,
-        createdAt: new Date().toISOString(),
-        status: "draft",
-        description: values.prompt,
-        channel: values.primaryChannel,
-        contentType: values.contentType,
-        budget: values.budget || "Not specified"
-      });
-      localStorage.setItem('campaigns', JSON.stringify(campaigns));
+      if (generationError) {
+        console.error("Error generating campaign:", generationError);
+        toast.error("Failed to generate campaign content");
+        setIsLoading(false);
+        return;
+      }
+      
+      // Process the generated content from OpenAI
+      console.log("Generated content:", generationData);
+      
+      // Create micro-cohorts in the database
+      if (generationData.microCohorts && generationData.microCohorts.length > 0) {
+        for (const cohort of generationData.microCohorts) {
+          // Create cohort
+          const { data: cohortData, error: cohortError } = await supabase
+            .from("micro_cohorts")
+            .insert({
+              campaign_id: campaignData.id,
+              title: cohort.title,
+              description: cohort.description,
+              demographics: cohort.demographics,
+              recommended_channels: generationData.recommendedChannels || []
+            })
+            .select()
+            .single();
+            
+          if (cohortError) {
+            console.error("Error creating cohort:", cohortError);
+            continue; // Continue with next cohort
+          }
+          
+          // Create creatives for each cohort
+          if (cohort.creatives && cohort.creatives.length > 0) {
+            for (const creative of cohort.creatives) {
+              const { data: creativeData, error: creativeError } = await supabase
+                .from("campaign_creatives")
+                .insert({
+                  cohort_id: cohortData.id,
+                  headline: creative.headline,
+                  description: creative.description,
+                  cta: creative.cta,
+                  image_prompt: creative.imagePrompt
+                })
+                .select()
+                .single();
+                
+              if (creativeError) {
+                console.error("Error creating creative:", creativeError);
+                continue;
+              }
+              
+              // Generate image for the creative if image prompt is available
+              if (creative.imagePrompt) {
+                // We'll handle image generation in CampaignReview to avoid delays
+                console.log("Image will be generated later for creative:", creativeData.id);
+              }
+            }
+          }
+        }
+      }
       
       toast.success("Campaign created successfully!");
       
       // Navigate to review page
-      navigate(`/campaign-review/${campaignId}`);
+      navigate(`/campaign-review/${campaignData.id}`);
     } catch (error) {
       console.error("Error creating campaign:", error);
       toast.error("Failed to create campaign. Please try again.");
