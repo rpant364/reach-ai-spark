@@ -31,25 +31,43 @@ serve(async (req) => {
     // Create a Supabase client
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+    // Fetch the creative to get headline and CTA for overlay text
+    const { data: creative, error: creativeError } = await supabase
+      .from("campaign_creatives")
+      .select("headline, cta")
+      .eq("id", creativeId)
+      .single();
+
+    if (creativeError) {
+      throw new Error(`Failed to fetch creative: ${creativeError.message}`);
+    }
+
     // Initialize Replicate client
     const replicate = new Replicate({
       auth: replicateApiKey,
     });
 
     console.log("Generating image with prompt:", prompt);
+    console.log("Headline for overlay:", creative.headline);
+    console.log("CTA for overlay:", creative.cta);
 
-    // Call Replicate API to generate an image - using the standard format for model ID
-    // The format should be: owner/model-name:version
+    // Call Replicate API to generate an image with ideogram-v2 model
+    // Using the format expected by the ideogram-ai/ideogram-v2 model
     const output = await replicate.run(
-      "stability-ai/sdxl:39ed52f2a78e934b3ba6e2a89f5b1c712de7dfea535525255b1aa35c5565e08b",
+      "ideogram-ai/ideogram-v2",
       {
         input: {
           prompt: prompt,
           width: 768,
           height: 768,
           negative_prompt: "low quality, blurry, distorted, ugly, deformed",
-          num_inference_steps: 40,
-          guidance_scale: 7.5,
+          style_preset: "photographic",
+          steps: 50,
+          cfg_scale: 7.5,
+          // Include headline as overlay text
+          overlay_text: creative.headline,
+          // Add CTA button text
+          button_text: creative.cta,
         },
       }
     );
