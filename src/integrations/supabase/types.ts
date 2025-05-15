@@ -9,7 +9,193 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      [_ in never]: never
+      brand_guidelines: {
+        Row: {
+          brand_name: string
+          brand_tone: string
+          brand_voice: string | null
+          created_at: string
+          do_not_use_phrases: string | null
+          id: string
+          logo_url: string | null
+          primary_color: string | null
+          sample_tagline: string | null
+          secondary_color: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          brand_name: string
+          brand_tone: string
+          brand_voice?: string | null
+          created_at?: string
+          do_not_use_phrases?: string | null
+          id?: string
+          logo_url?: string | null
+          primary_color?: string | null
+          sample_tagline?: string | null
+          secondary_color?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          brand_name?: string
+          brand_tone?: string
+          brand_voice?: string | null
+          created_at?: string
+          do_not_use_phrases?: string | null
+          id?: string
+          logo_url?: string | null
+          primary_color?: string | null
+          sample_tagline?: string | null
+          secondary_color?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      campaign_creatives: {
+        Row: {
+          cohort_id: string
+          created_at: string
+          cta: string
+          description: string
+          headline: string
+          id: string
+          image_prompt: string | null
+          image_url: string | null
+          updated_at: string
+        }
+        Insert: {
+          cohort_id: string
+          created_at?: string
+          cta: string
+          description: string
+          headline: string
+          id?: string
+          image_prompt?: string | null
+          image_url?: string | null
+          updated_at?: string
+        }
+        Update: {
+          cohort_id?: string
+          created_at?: string
+          cta?: string
+          description?: string
+          headline?: string
+          id?: string
+          image_prompt?: string | null
+          image_url?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campaign_creatives_cohort_id_fkey"
+            columns: ["cohort_id"]
+            isOneToOne: false
+            referencedRelation: "micro_cohorts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      campaigns: {
+        Row: {
+          budget: string | null
+          content_type: string
+          created_at: string
+          id: string
+          primary_channel: string
+          prompt: string
+          status: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          budget?: string | null
+          content_type: string
+          created_at?: string
+          id?: string
+          primary_channel: string
+          prompt: string
+          status?: string
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          budget?: string | null
+          content_type?: string
+          created_at?: string
+          id?: string
+          primary_channel?: string
+          prompt?: string
+          status?: string
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      micro_cohorts: {
+        Row: {
+          campaign_id: string
+          created_at: string
+          demographics: string
+          description: string
+          id: string
+          recommended_channels: Json | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          campaign_id: string
+          created_at?: string
+          demographics: string
+          description: string
+          id?: string
+          recommended_channels?: Json | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          campaign_id?: string
+          created_at?: string
+          demographics?: string
+          description?: string
+          id?: string
+          recommended_channels?: Json | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "micro_cohorts_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          email: string
+          id: string
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          id: string
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

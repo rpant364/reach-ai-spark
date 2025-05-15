@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { toast } from "sonner";
 
 const formSchema = z.object({
   email: z.string().email({ message: "Please enter a valid email address" }),
@@ -45,8 +46,9 @@ const Login = () => {
       setIsLoading(true);
       await signIn(values.email, values.password);
       navigate("/dashboard");
-    } catch (error) {
+    } catch (error: any) {
       console.error("Login failed:", error);
+      // Error is already handled in the signIn function with toast
     } finally {
       setIsLoading(false);
     }

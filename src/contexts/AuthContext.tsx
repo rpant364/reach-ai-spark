@@ -1,15 +1,12 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { Session, User } from '@supabase/supabase-js';
+import { supabase } from '@/integrations/supabase/client';
 import { toast } from "sonner";
-
-interface User {
-  id: string;
-  email: string;
-  createdAt: string;
-}
 
 interface AuthContextType {
   user: User | null;
+  session: Session | null;
   loading: boolean;
   signUp: (email: string, password: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
@@ -22,44 +19,73 @@ const AuthContext = createContext<AuthContextType | null>(null);
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [hasBrandGuidelines, setHasBrandGuidelines] = useState(false);
 
   useEffect(() => {
-    // Check for saved session in local storage
-    const savedUser = localStorage.getItem('user');
-    const savedBrandGuidelines = localStorage.getItem('hasBrandGuidelines');
-    
-    if (savedUser) {
-      try {
-        setUser(JSON.parse(savedUser));
-        setHasBrandGuidelines(savedBrandGuidelines === 'true');
-      } catch (error) {
-        console.error('Error parsing saved user:', error);
-        localStorage.removeItem('user');
+    // Set up the auth state listener
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        setSession(session);
+        setUser(session?.user ?? null);
+        
+        if (session?.user) {
+          checkBrandGuidelines(session.user.id);
+        }
       }
-    }
-    setLoading(false);
+    );
+
+    // Check for existing session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      
+      if (session?.user) {
+        checkBrandGuidelines(session.user.id);
+      }
+      setLoading(false);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
-  // For demo purposes, simulating Supabase auth functions
+  // Check if user has completed brand guidelines
+  const checkBrandGuidelines = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('brand_guidelines')
+        .select('id')
+        .eq('user_id', userId)
+        .single();
+
+      if (error) {
+        console.error('Error checking brand guidelines:', error);
+        setHasBrandGuidelines(false);
+      } else {
+        setHasBrandGuidelines(!!data);
+      }
+    } catch (error) {
+      console.error('Error checking brand guidelines:', error);
+      setHasBrandGuidelines(false);
+    }
+  };
+
   const signUp = async (email: string, password: string) => {
     try {
       setLoading(true);
-      // In a real app, this would call supabase.auth.signUp
-      const newUser = { 
-        id: `user_${Math.random().toString(36).substr(2, 9)}`,
-        email, 
-        createdAt: new Date().toISOString() 
-      };
-      setUser(newUser);
-      localStorage.setItem('user', JSON.stringify(newUser));
-      setHasBrandGuidelines(false);
-      localStorage.setItem('hasBrandGuidelines', 'false');
-      toast.success("Account created successfully!");
-    } catch (error) {
+      const { error } = await supabase.auth.signUp({ email, password });
+      
+      if (error) {
+        toast.error(error.message);
+        throw error;
+      }
+      
+      toast.success("Account created successfully! Please check your email for verification.");
+    } catch (error: any) {
       console.error('Error signing up:', error);
-      toast.error("Failed to create account. Please try again.");
       throw error;
     } finally {
       setLoading(false);
@@ -69,26 +95,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const signIn = async (email: string, password: string) => {
     try {
       setLoading(true);
-      // In a real app, this would call supabase.auth.signInWithPassword
-      // Mock authentication - this is for demo only
-      const newUser = { 
-        id: `user_${Math.random().toString(36).substr(2, 9)}`,
-        email, 
-        createdAt: new Date().toISOString() 
-      };
-      setUser(newUser);
-      localStorage.setItem('user', JSON.stringify(newUser));
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
       
-      // Check if user has completed brand guidelines
-      // This would typically be fetched from Supabase
-      const mockHasGuidelines = Math.random() > 0.5;
-      setHasBrandGuidelines(mockHasGuidelines);
-      localStorage.setItem('hasBrandGuidelines', mockHasGuidelines.toString());
+      if (error) {
+        toast.error(error.message);
+        throw error;
+      }
       
       toast.success("Logged in successfully!");
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error signing in:', error);
-      toast.error("Failed to login. Please check your credentials.");
       throw error;
     } finally {
       setLoading(false);
@@ -98,14 +114,18 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const signOut = async () => {
     try {
       setLoading(true);
-      // In a real app, this would call supabase.auth.signOut
-      setUser(null);
-      localStorage.removeItem('user');
-      localStorage.removeItem('hasBrandGuidelines');
+      const { error } = await supabase.auth.signOut();
+      
+      if (error) {
+        toast.error(error.message);
+        throw error;
+      }
+      
+      setHasBrandGuidelines(false);
       toast.success("Logged out successfully");
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error signing out:', error);
-      toast.error("Failed to log out. Please try again.");
+      throw error;
     } finally {
       setLoading(false);
     }
@@ -114,6 +134,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   return (
     <AuthContext.Provider value={{ 
       user, 
+      session,
       loading, 
       signUp, 
       signIn, 

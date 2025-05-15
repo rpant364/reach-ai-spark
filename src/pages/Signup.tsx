@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { toast } from "sonner";
 
 const formSchema = z
   .object({
@@ -51,9 +52,10 @@ const Signup = () => {
     try {
       setIsLoading(true);
       await signUp(values.email, values.password);
-      navigate("/brand-guidelines");
-    } catch (error) {
+      toast.success("Account created! Please check your email for a verification link.");
+    } catch (error: any) {
       console.error("Signup failed:", error);
+      // Error is already handled in the signUp function with toast
     } finally {
       setIsLoading(false);
     }
