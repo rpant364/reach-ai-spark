@@ -85,13 +85,25 @@ serve(async (req) => {
 
     console.log("Replicate API response:", output);
 
-    if (!output || !Array.isArray(output) || output.length === 0) {
-      console.error("Empty or invalid response from Replicate API:", output);
-      throw new Error("No image generated from Replicate API");
+    // Fix: Properly handle the response from Replicate API
+    // The API returns a string URL for a single image or an array of URLs for multiple images
+    let imageUrl;
+    
+    if (typeof output === 'string') {
+      // If output is directly a string URL
+      imageUrl = output;
+    } else if (Array.isArray(output) && output.length > 0) {
+      // If output is an array of URLs, take the first one
+      imageUrl = output[0];
+    } else {
+      console.error("Unexpected response format from Replicate API:", output);
+      throw new Error("Invalid response format from Replicate API");
     }
 
-    // Get the generated image URL (first result)
-    const imageUrl = output[0];
+    if (!imageUrl) {
+      console.error("No image URL found in Replicate API response:", output);
+      throw new Error("No image URL in Replicate API response");
+    }
 
     console.log("Generated image URL:", imageUrl);
 
