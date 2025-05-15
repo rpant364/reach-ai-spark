@@ -47,6 +47,32 @@ interface Campaign {
   cohorts: Cohort[];
 }
 
+// Helper function to safely convert Json type to string[]
+const convertToStringArray = (value: unknown): string[] | null => {
+  if (!value) return null;
+  
+  // If it's already an array, check if all elements are strings
+  if (Array.isArray(value)) {
+    return value.map(item => String(item));
+  }
+  
+  // If it's a string (JSON encoded array), try to parse it
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) {
+        return parsed.map(item => String(item));
+      }
+      return [String(value)];
+    } catch (e) {
+      return [String(value)];
+    }
+  }
+  
+  // For any other type, convert to string and return as single item array
+  return [String(value)];
+};
+
 const CampaignReview = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -119,7 +145,7 @@ const CampaignReview = () => {
           title: cohort.title,
           description: cohort.description,
           demographics: cohort.demographics,
-          recommended_channels: cohort.recommended_channels,
+          recommended_channels: convertToStringArray(cohort.recommended_channels),
           creatives: creativesData
         });
 
