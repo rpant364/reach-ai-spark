@@ -52,10 +52,11 @@ serve(async (req) => {
     console.log("CTA for overlay:", creative.cta);
 
     // Create the input for the Ideogram model
+    // Increase resolution to 1024x1024 for better quality
     const modelInput = {
       prompt: prompt,
-      width: 768,
-      height: 768,
+      width: 1024,
+      height: 1024,
       negative_prompt: "low quality, blurry, distorted, ugly, deformed",
       style_preset: "photographic",
       steps: 40,
