@@ -38,17 +38,18 @@ serve(async (req) => {
 
     console.log("Generating image with prompt:", prompt);
 
-    // Call Replicate API to generate an image with ideogramv2 model
-    // Using the correct model identifier for ideogram-v2
+    // Call Replicate API to generate an image - using the standard format for model ID
+    // The format should be: owner/model-name:version
     const output = await replicate.run(
-      "ideogram-ai/ideogram-v2:9d5a6b19234de4addf2fe28809be14dc6acd6edc3bc9b0b3f495be5941a4e144",
+      "stability-ai/sdxl:39ed52f2a78e934b3ba6e2a89f5b1c712de7dfea535525255b1aa35c5565e08b",
       {
         input: {
           prompt: prompt,
           width: 768,
           height: 768,
-          negative_prompt: "low quality, blurry, distorted",
-          steps: 50,
+          negative_prompt: "low quality, blurry, distorted, ugly, deformed",
+          num_inference_steps: 40,
+          guidance_scale: 7.5,
         },
       }
     );
