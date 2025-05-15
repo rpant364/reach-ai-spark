@@ -10,6 +10,7 @@ import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import BrandGuidelines from "./pages/BrandGuidelines";
 import Dashboard from "./pages/Dashboard";
+import Profile from "./pages/Profile";
 import CreateCampaign from "./pages/CreateCampaign";
 import CampaignReview from "./pages/CampaignReview";
 import NotFound from "./pages/NotFound";
@@ -36,6 +37,11 @@ const App = () => (
             <Route path="/dashboard" element={
               <ProtectedRoute>
                 <Dashboard />
+              </ProtectedRoute>
+            } />
+            <Route path="/profile" element={
+              <ProtectedRoute>
+                <Profile />
               </ProtectedRoute>
             } />
             <Route path="/create-campaign" element={

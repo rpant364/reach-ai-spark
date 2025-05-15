@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -30,7 +29,7 @@ const SidebarLayout: React.FC<SidebarLayoutProps> = ({ children }) => {
     {
       icon: <User className="h-5 w-5" />,
       label: 'Profile',
-      href: '/profile', // Not implemented yet
+      href: '/profile',
     },
     {
       icon: <Settings className="h-5 w-5" />,
