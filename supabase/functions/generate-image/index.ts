@@ -5,7 +5,7 @@ import { corsHeaders } from "../_shared/cors.ts";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
 const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
-const replicateApiKey = Deno.env.get("REPLICATE_API_KEY") || "";
+const runwareApiKey = Deno.env.get("RUNWARE_API_KEY") || "";
 
 interface RequestBody {
   prompt: string;
@@ -46,10 +46,10 @@ serve(async (req) => {
       );
     }
 
-    // Check if Replicate API key is configured
-    if (!replicateApiKey) {
+    // Check if Runware API key is configured
+    if (!runwareApiKey) {
       return new Response(
-        JSON.stringify({ error: "Replicate API key not configured" }),
+        JSON.stringify({ error: "Runware API key not configured" }),
         { 
           status: 500, 
           headers: { ...corsHeaders, "Content-Type": "application/json" }
@@ -57,30 +57,41 @@ serve(async (req) => {
       );
     }
 
-    // Call Replicate API to generate the image
-    // Using Stable Diffusion model
-    const replicateResponse = await fetch("https://api.replicate.com/v1/predictions", {
+    // Call Runware API to generate the image
+    console.log("Calling Runware API with prompt:", prompt);
+    
+    const runwareResponse = await fetch("https://api.runware.ai/v1", {
       method: "POST",
       headers: {
-        "Authorization": `Token ${replicateApiKey}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        version: "db21e45d3f7023abc2a46ee38a23973f6dce16bb082a930b0c49861f96d1e5bf", // Stable Diffusion v1.5
-        input: {
-          prompt: prompt,
-          negative_prompt: "blurry, bad quality, distorted, disfigured",
-          width: 768,
-          height: 512,
-          num_inference_steps: 40
+      body: JSON.stringify([
+        {
+          taskType: "authentication",
+          apiKey: runwareApiKey
+        },
+        {
+          taskType: "imageInference",
+          taskUUID: crypto.randomUUID(),
+          positivePrompt: prompt,
+          model: "runware:100@1",
+          width: 1024,
+          height: 768,
+          numberResults: 1,
+          outputFormat: "WEBP",
+          CFGScale: 1,
+          scheduler: "FlowMatchEulerDiscreteScheduler",
+          strength: 0.8,
         }
-      }),
+      ]),
     });
 
-    if (!replicateResponse.ok) {
-      const error = await replicateResponse.json();
+    if (!runwareResponse.ok) {
+      console.error("Runware API error status:", runwareResponse.status);
+      const error = await runwareResponse.text();
+      console.error("Runware API error:", error);
       return new Response(
-        JSON.stringify({ error: "Error calling Replicate API", details: error }),
+        JSON.stringify({ error: "Error calling Runware API", details: error }),
         { 
           status: 500, 
           headers: { ...corsHeaders, "Content-Type": "application/json" }
@@ -88,40 +99,36 @@ serve(async (req) => {
       );
     }
 
-    // Get the prediction ID and status URL
-    const replicateData = await replicateResponse.json();
-    const predictionId = replicateData.id;
-    const statusUrl = replicateData.urls.get;
+    // Get the response data
+    const runwareData = await runwareResponse.json();
+    console.log("Runware response:", runwareData);
+    
+    if (!runwareData || !runwareData.data) {
+      return new Response(
+        JSON.stringify({ error: "Invalid response from Runware API" }),
+        { 
+          status: 500, 
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        }
+      );
+    }
 
-    // Function to check the status of the prediction
-    const checkPrediction = async (statusUrl: string): Promise<any> => {
-      const response = await fetch(statusUrl, {
-        headers: {
-          "Authorization": `Token ${replicateApiKey}`,
-          "Content-Type": "application/json",
-        },
-      });
-      
-      if (!response.ok) {
-        throw new Error("Failed to check prediction status");
-      }
-      
-      const data = await response.json();
-      
-      if (data.status === "succeeded") {
-        return data;
-      } else if (data.status === "failed") {
-        throw new Error("Prediction failed: " + (data.error || "Unknown error"));
-      } else {
-        // Still processing, wait and check again
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        return checkPrediction(statusUrl);
-      }
-    };
+    // Find the imageInference task result
+    const imageResult = runwareData.data.find(item => item.taskType === "imageInference");
+    
+    if (!imageResult || !imageResult.imageURL) {
+      console.error("No image URL in response:", runwareData);
+      return new Response(
+        JSON.stringify({ error: "No image URL in response from Runware API" }),
+        { 
+          status: 500, 
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        }
+      );
+    }
 
-    // Wait for the prediction to complete
-    const predictionResult = await checkPrediction(statusUrl);
-    const imageUrl = predictionResult.output && predictionResult.output[0];
+    const imageUrl = imageResult.imageURL;
+    console.log("Image URL generated:", imageUrl);
 
     // If an image was generated successfully and we have a creativeId, update the creative in the database
     if (imageUrl && creativeId) {
