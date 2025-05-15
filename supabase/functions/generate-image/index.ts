@@ -51,28 +51,42 @@ serve(async (req) => {
     console.log("Headline for overlay:", creative.headline);
     console.log("CTA for overlay:", creative.cta);
 
-    // Call Replicate API to generate an image with ideogram-v2 model
-    // Using the format expected by the ideogram-ai/ideogram-v2 model
+    // Create the input for the Ideogram model
+    const modelInput = {
+      prompt: prompt,
+      width: 768,
+      height: 768,
+      negative_prompt: "low quality, blurry, distorted, ugly, deformed",
+      style_preset: "photographic",
+      steps: 40,
+      cfg_scale: 7.5,
+    };
+
+    // Add overlay text only if headline exists
+    if (creative.headline) {
+      modelInput.overlay_text = creative.headline;
+    }
+
+    // Add button text only if CTA exists
+    if (creative.cta) {
+      modelInput.button_text = creative.cta;
+    }
+
+    console.log("Model input:", modelInput);
+
+    // Call Replicate API with verbose logging
+    console.log("Calling Replicate API with model: ideogram-ai/ideogram-v2");
     const output = await replicate.run(
       "ideogram-ai/ideogram-v2",
       {
-        input: {
-          prompt: prompt,
-          width: 768,
-          height: 768,
-          negative_prompt: "low quality, blurry, distorted, ugly, deformed",
-          style_preset: "photographic",
-          steps: 50,
-          cfg_scale: 7.5,
-          // Include headline as overlay text
-          overlay_text: creative.headline,
-          // Add CTA button text
-          button_text: creative.cta,
-        },
+        input: modelInput
       }
     );
 
+    console.log("Replicate API response:", output);
+
     if (!output || !Array.isArray(output) || output.length === 0) {
+      console.error("Empty or invalid response from Replicate API:", output);
       throw new Error("No image generated from Replicate API");
     }
 
