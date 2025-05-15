@@ -1,163 +1,88 @@
 
-import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
-import { corsHeaders } from "../_shared/cors.ts";
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.7.1";
 
-const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
-const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
-const runwareApiKey = Deno.env.get("RUNWARE_API_KEY") || "";
-
-interface RequestBody {
-  prompt: string;
-  creativeId?: string;
-}
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
 
 serve(async (req) => {
-  // Handle CORS preflight request
+  // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    // Check if the request is authorized
-    const supabase = createClient(supabaseUrl, supabaseAnonKey);
-    const { data: { session }, error: authError } = await supabase.auth.getSession();
+    const { prompt, creativeId } = await req.json();
+    const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+    const runwareApiKey = Deno.env.get("RUNWARE_API_KEY");
 
-    if (authError || !session) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { 
-          status: 401, 
-          headers: { ...corsHeaders, "Content-Type": "application/json" }
-        }
-      );
-    }
-
-    // Parse the request body
-    const { prompt, creativeId } = await req.json() as RequestBody;
-    
-    if (!prompt) {
-      return new Response(
-        JSON.stringify({ error: "Missing prompt parameter" }),
-        { 
-          status: 400, 
-          headers: { ...corsHeaders, "Content-Type": "application/json" }
-        }
-      );
-    }
-
-    // Check if Runware API key is configured
     if (!runwareApiKey) {
-      return new Response(
-        JSON.stringify({ error: "Runware API key not configured" }),
-        { 
-          status: 500, 
-          headers: { ...corsHeaders, "Content-Type": "application/json" }
-        }
-      );
+      throw new Error("Missing Runware API key");
     }
 
-    // Call Runware API to generate the image
-    console.log("Calling Runware API with prompt:", prompt);
-    
-    const runwareResponse = await fetch("https://api.runware.ai/v1", {
+    if (!prompt || !creativeId) {
+      throw new Error("Missing required parameters: prompt and creativeId");
+    }
+
+    // Create a Supabase client
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // First, make a request to the Runware API to generate an image
+    const runwareResponse = await fetch("https://api.runware.ai/v1/image/generation", {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
+        "Authorization": `Bearer ${runwareApiKey}`,
+        "Content-Type": "application/json"
       },
-      body: JSON.stringify([
-        {
-          taskType: "authentication",
-          apiKey: runwareApiKey
-        },
-        {
-          taskType: "imageInference",
-          taskUUID: crypto.randomUUID(),
-          positivePrompt: prompt,
-          model: "runware:100@1",
-          width: 1024,
-          height: 768,
-          numberResults: 1,
-          outputFormat: "WEBP",
-          CFGScale: 1,
-          scheduler: "FlowMatchEulerDiscreteScheduler",
-          strength: 0.8,
-        }
-      ]),
+      body: JSON.stringify({
+        prompt: prompt,
+        width: 768,
+        height: 768,
+        model: "stable-diffusion-xl"
+      })
     });
 
     if (!runwareResponse.ok) {
-      console.error("Runware API error status:", runwareResponse.status);
-      const error = await runwareResponse.text();
-      console.error("Runware API error:", error);
-      return new Response(
-        JSON.stringify({ error: "Error calling Runware API", details: error }),
-        { 
-          status: 500, 
-          headers: { ...corsHeaders, "Content-Type": "application/json" }
-        }
-      );
+      const errorText = await runwareResponse.text();
+      throw new Error(`Runware API error: ${errorText}`);
     }
 
-    // Get the response data
     const runwareData = await runwareResponse.json();
-    console.log("Runware response:", runwareData);
     
-    if (!runwareData || !runwareData.data) {
-      return new Response(
-        JSON.stringify({ error: "Invalid response from Runware API" }),
-        { 
-          status: 500, 
-          headers: { ...corsHeaders, "Content-Type": "application/json" }
-        }
-      );
+    if (!runwareData.images || runwareData.images.length === 0) {
+      throw new Error("No images returned from Runware API");
     }
 
-    // Find the imageInference task result
-    const imageResult = runwareData.data.find(item => item.taskType === "imageInference");
-    
-    if (!imageResult || !imageResult.imageURL) {
-      console.error("No image URL in response:", runwareData);
-      return new Response(
-        JSON.stringify({ error: "No image URL in response from Runware API" }),
-        { 
-          status: 500, 
-          headers: { ...corsHeaders, "Content-Type": "application/json" }
-        }
-      );
+    // Get the generated image URL
+    const imageUrl = runwareData.images[0];
+
+    // Update the campaign creative with the generated image URL
+    const { error: updateError } = await supabase
+      .from("campaign_creatives")
+      .update({ image_url: imageUrl })
+      .eq("id", creativeId);
+
+    if (updateError) {
+      console.error("Error updating creative with image URL:", updateError);
+      throw new Error(`Failed to update creative: ${updateError.message}`);
     }
 
-    const imageUrl = imageResult.imageURL;
-    console.log("Image URL generated:", imageUrl);
-
-    // If an image was generated successfully and we have a creativeId, update the creative in the database
-    if (imageUrl && creativeId) {
-      const { error: updateError } = await supabase
-        .from("campaign_creatives")
-        .update({ image_url: imageUrl })
-        .eq("id", creativeId);
-
-      if (updateError) {
-        console.error("Error updating creative with image URL:", updateError);
-      }
-    }
-
-    // Return the image URL
-    return new Response(
-      JSON.stringify({ success: true, imageUrl }),
-      { 
-        status: 200, 
-        headers: { ...corsHeaders, "Content-Type": "application/json" }
-      }
-    );
-
+    return new Response(JSON.stringify({ 
+      success: true, 
+      imageUrl: imageUrl 
+    }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   } catch (error) {
-    console.error("Error generating image:", error);
+    console.error("Error in generate-image function:", error);
     return new Response(
-      JSON.stringify({ error: "Internal Server Error", details: error.message }),
-      { 
-        status: 500, 
-        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      JSON.stringify({ error: error.message || "Unknown error" }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       }
     );
   }

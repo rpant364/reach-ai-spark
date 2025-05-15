@@ -1,268 +1,164 @@
 
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
 import SidebarLayout from "@/components/layouts/SidebarLayout";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { toast } from "sonner";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Plus, LayoutDashboard } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
-// Mock campaign data for demonstration
 interface Campaign {
   id: string;
   title: string;
-  createdAt: string;
-  status: "draft" | "active" | "completed" | "archived";
-  description?: string;
+  created_at: string;
+  status: string;
+  cohort_count: number;
 }
 
 const Dashboard = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Fetch campaigns - in a real app, this would call Supabase
-    const fetchCampaigns = async () => {
-      try {
-        // Simulate API delay
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+    if (user) {
+      fetchCampaigns();
+    }
+  }, [user]);
 
-        // Mock data
-        const mockCampaigns: Campaign[] = [
-          {
-            id: "camp_1",
-            title: "Summer Travel Promotion",
-            createdAt: "2023-05-10T10:30:00Z",
-            status: "active",
-            description: "Promoting summer travel packages for young professionals",
-          },
-          {
-            id: "camp_2",
-            title: "Business Class Experience",
-            createdAt: "2023-04-22T14:15:00Z",
-            status: "completed",
-            description: "Highlighting premium services for business travelers",
-          },
-          {
-            id: "camp_3",
-            title: "Holiday Season Deals",
-            createdAt: "2023-06-01T09:45:00Z",
-            status: "draft",
-            description: "Special offers for the upcoming holiday season",
-          },
-        ];
-
-        setCampaigns(mockCampaigns);
-      } catch (error) {
+  const fetchCampaigns = async () => {
+    try {
+      setLoading(true);
+      
+      // Fetch campaigns with count of cohorts
+      const { data, error } = await supabase
+        .from('campaigns')
+        .select(`
+          id, 
+          title, 
+          created_at, 
+          status,
+          micro_cohorts (count)
+        `)
+        .eq('user_id', user?.id)
+        .order('created_at', { ascending: false });
+      
+      if (error) {
         console.error("Error fetching campaigns:", error);
-        toast.error("Failed to load campaigns");
-      } finally {
-        setIsLoading(false);
+        return;
       }
-    };
-
-    fetchCampaigns();
-  }, []);
+      
+      // Format the data to include cohort count
+      const formattedCampaigns = data.map(campaign => ({
+        id: campaign.id,
+        title: campaign.title,
+        created_at: campaign.created_at,
+        status: campaign.status,
+        cohort_count: campaign.micro_cohorts.length > 0 ? campaign.micro_cohorts[0].count : 0
+      }));
+      
+      setCampaigns(formattedCampaigns);
+    } catch (error) {
+      console.error("Error fetching campaigns:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleCreateCampaign = () => {
     navigate("/create-campaign");
   };
 
-  const handleDeleteCampaign = async (id: string) => {
-    try {
-      // In a real app, this would delete from Supabase
-      setCampaigns((prev) => prev.filter((campaign) => campaign.id !== id));
-      toast.success("Campaign deleted successfully");
-    } catch (error) {
-      console.error("Error deleting campaign:", error);
-      toast.error("Failed to delete campaign");
-    }
-  };
-
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-    return new Intl.DateTimeFormat("en-US", {
+    return date.toLocaleDateString("en-US", {
       year: "numeric",
       month: "short",
       day: "numeric",
-    }).format(date);
+    });
   };
 
-  const getStatusColor = (status: Campaign["status"]) => {
-    switch (status) {
-      case "active":
-        return "bg-green-100 text-green-800";
-      case "completed":
-        return "bg-blue-100 text-blue-800";
-      case "draft":
-        return "bg-yellow-100 text-yellow-800";
-      case "archived":
-        return "bg-gray-100 text-gray-800";
-      default:
-        return "bg-gray-100 text-gray-800";
-    }
-  };
+  // Empty state display
+  const EmptyState = () => (
+    <div className="text-center py-10">
+      <div className="bg-indigo-100 p-3 rounded-full w-12 h-12 mx-auto mb-4 flex items-center justify-center">
+        <LayoutDashboard className="h-6 w-6 text-indigo-600" />
+      </div>
+      <h3 className="text-lg font-medium text-gray-900 mb-1">No campaigns yet</h3>
+      <p className="text-gray-500 mb-6 max-w-md mx-auto">
+        Create your first campaign to get started with AI-powered marketing recommendations.
+      </p>
+      <Button 
+        onClick={handleCreateCampaign}
+        className="bg-indigo-600 hover:bg-indigo-700"
+      >
+        <Plus className="h-4 w-4 mr-2" />
+        Create Campaign
+      </Button>
+    </div>
+  );
 
   return (
     <SidebarLayout>
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Campaigns</h1>
+            <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
             <p className="text-muted-foreground">
-              Manage and analyze your marketing campaigns
+              Manage your marketing campaigns
             </p>
           </div>
           <Button 
             onClick={handleCreateCampaign}
-            className="bg-aviation-blue hover:bg-aviation-indigo"
+            className="bg-indigo-600 hover:bg-indigo-700"
           >
-            Create New Campaign
+            <Plus className="h-4 w-4 mr-2" />
+            Create Campaign
           </Button>
         </div>
-
-        {isLoading ? (
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {[1, 2, 3].map((i) => (
-              <Card key={i} className="border shadow-sm overflow-hidden">
-                <CardHeader className="p-6 bg-gray-50">
-                  <div className="h-6 w-3/4 bg-gray-200 rounded animate-pulse-subtle"></div>
-                  <div className="h-4 w-1/2 bg-gray-200 rounded animate-pulse-subtle mt-2"></div>
-                </CardHeader>
-                <CardContent className="p-6">
-                  <div className="space-y-3">
-                    <div className="h-4 w-full bg-gray-100 rounded animate-pulse-subtle"></div>
-                    <div className="h-4 w-5/6 bg-gray-100 rounded animate-pulse-subtle"></div>
-                    <div className="h-4 w-3/4 bg-gray-100 rounded animate-pulse-subtle"></div>
-                  </div>
-                  <div className="flex items-center justify-between mt-6">
-                    <div className="h-8 w-16 bg-gray-200 rounded animate-pulse-subtle"></div>
-                    <div className="flex space-x-2">
-                      <div className="h-9 w-9 bg-gray-200 rounded animate-pulse-subtle"></div>
-                      <div className="h-9 w-9 bg-gray-200 rounded animate-pulse-subtle"></div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+        
+        {loading ? (
+          <div className="flex justify-center py-10">
+            <div className="w-10 h-10 border-4 border-t-indigo-600 rounded-full animate-spin"></div>
           </div>
         ) : campaigns.length === 0 ? (
           <Card className="border shadow-sm">
-            <CardContent className="p-10 text-center">
-              <div className="mx-auto w-14 h-14 rounded-full bg-aviation-lightBlue flex items-center justify-center mb-4">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  className="h-6 w-6 text-aviation-blue"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M12 6v6m0 0v6m0-6h6m-6 0H6"
-                  />
-                </svg>
-              </div>
-              <CardTitle className="text-xl mb-2">No campaigns yet</CardTitle>
-              <CardDescription className="mb-6">
-                Create your first campaign to get started
-              </CardDescription>
-              <Button 
-                onClick={handleCreateCampaign}
-                className="bg-aviation-blue hover:bg-aviation-indigo"
-              >
-                Create New Campaign
-              </Button>
+            <CardContent className="pt-6">
+              <EmptyState />
             </CardContent>
           </Card>
         ) : (
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-6">
             {campaigns.map((campaign) => (
-              <Card key={campaign.id} className="border shadow-sm overflow-hidden">
-                <CardHeader className="p-6 bg-gray-50">
-                  <div className="flex justify-between items-start">
-                    <CardTitle>{campaign.title}</CardTitle>
-                    <div className={`text-xs font-medium px-2 py-1 rounded-full ${getStatusColor(campaign.status)}`}>
+              <Card key={campaign.id} className="border shadow-sm hover:shadow-md transition-shadow">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-xl">{campaign.title}</CardTitle>
+                  <CardDescription className="flex justify-between">
+                    <span>Created {formatDate(campaign.created_at)}</span>
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium 
+                      ${campaign.status === 'active' ? 'bg-green-100 text-green-800' : 
+                        campaign.status === 'draft' ? 'bg-yellow-100 text-yellow-800' : 
+                          'bg-gray-100 text-gray-800'}`}>
                       {campaign.status.charAt(0).toUpperCase() + campaign.status.slice(1)}
-                    </div>
-                  </div>
-                  <CardDescription>
-                    Created on {formatDate(campaign.createdAt)}
+                    </span>
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="p-6">
-                  <p className="text-sm text-gray-600 mb-6">
-                    {campaign.description || "No description provided."}
-                  </p>
-                  <div className="flex items-center justify-between mt-4">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => navigate(`/campaign-review/${campaign.id}`)}
-                    >
-                      View Details
-                    </Button>
-                    <div className="flex space-x-2">
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="h-9 w-9"
-                        onClick={() => navigate(`/create-campaign?edit=${campaign.id}`)}
-                      >
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          width="16"
-                          height="16"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          className="lucide lucide-pencil"
-                        >
-                          <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
-                          <path d="m15 5 4 4" />
-                        </svg>
-                        <span className="sr-only">Edit</span>
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="h-9 w-9 text-red-500 hover:text-red-700"
-                        onClick={() => handleDeleteCampaign(campaign.id)}
-                      >
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          width="16"
-                          height="16"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          className="lucide lucide-trash"
-                        >
-                          <path d="M3 6h18" />
-                          <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
-                          <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
-                          <line x1="10" x2="10" y1="11" y2="17" />
-                          <line x1="14" x2="14" y1="11" y2="17" />
-                        </svg>
-                        <span className="sr-only">Delete</span>
-                      </Button>
-                    </div>
+                <CardContent className="pb-2">
+                  <div className="text-sm text-gray-500">
+                    {campaign.cohort_count} micro {campaign.cohort_count === 1 ? 'cohort' : 'cohorts'}
                   </div>
                 </CardContent>
+                <CardFooter className="border-t pt-4 flex justify-end gap-3">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => navigate(`/campaign-review/${campaign.id}`)}
+                  >
+                    View
+                  </Button>
+                </CardFooter>
               </Card>
             ))}
           </div>

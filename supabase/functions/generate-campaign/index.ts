@@ -1,294 +1,177 @@
 
-import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
-import { corsHeaders } from "../_shared/cors.ts";
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.7.1";
 
-const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
-const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
-const openaiApiKey = Deno.env.get("OPENAI_API_KEY") || "";
-
-interface RequestBody {
-  campaignId: string;
-  prompt: string;
-  primaryChannel: string;
-  contentType: string;
-  budget: string;
-}
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
 
 serve(async (req) => {
-  // Handle CORS preflight request
+  // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    console.log("Starting generate-campaign function");
-    
-    // Check if OpenAI API key is available
-    if (!openaiApiKey) {
-      console.error("OpenAI API key not configured");
-      return new Response(
-        JSON.stringify({ error: "OpenAI API key not configured" }),
-        { 
-          status: 500, 
-          headers: { ...corsHeaders, "Content-Type": "application/json" }
-        }
-      );
+    const { campaignId, prompt, brandGuidelines, budget } = await req.json();
+    const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+    const openAIKey = Deno.env.get("OPENAI_API_KEY");
+
+    if (!openAIKey) {
+      throw new Error("Missing OpenAI API key");
     }
 
-    // Create Supabase client for authentication check
-    const supabase = createClient(supabaseUrl, supabaseAnonKey);
-    
-    // Parse JWT from Authorization header
-    let jwt = null;
-    const authHeader = req.headers.get('Authorization');
-
-    if (authHeader) {
-      jwt = authHeader.replace('Bearer ', '');
-      console.log("Authorization header found, JWT extracted");
-    } else {
-      console.error("No Authorization header found");
-      return new Response(
-        JSON.stringify({ error: "No authorization header found" }),
-        { 
-          status: 401, 
-          headers: { ...corsHeaders, "Content-Type": "application/json" }
-        }
-      );
-    }
-
-    // Get auth user from JWT
-    try {
-      const { data: { user }, error } = await supabase.auth.getUser(jwt);
-      if (error || !user) {
-        console.error("Failed to validate user JWT:", error);
-        return new Response(
-          JSON.stringify({ error: "Unauthorized: Invalid token", details: error }),
-          { 
-            status: 401, 
-            headers: { ...corsHeaders, "Content-Type": "application/json" }
-          }
-        );
-      }
-      console.log("User authenticated successfully:", user.id);
-    } catch (authError) {
-      console.error("Error validating token:", authError);
-      return new Response(
-        JSON.stringify({ error: "Error validating authentication token", details: authError.message }),
-        { 
-          status: 401, 
-          headers: { ...corsHeaders, "Content-Type": "application/json" }
-        }
-      );
-    }
-
-    // Parse the request body
-    let requestBody: RequestBody;
-    try {
-      requestBody = await req.json() as RequestBody;
-      console.log("Request body parsed:", requestBody);
-    } catch (e) {
-      console.error("Error parsing request body:", e);
-      return new Response(
-        JSON.stringify({ error: "Invalid request body", details: e.message }),
-        { 
-          status: 400, 
-          headers: { ...corsHeaders, "Content-Type": "application/json" }
-        }
-      );
-    }
-    
-    const { campaignId, prompt, primaryChannel, contentType, budget } = requestBody;
-    
     if (!campaignId || !prompt) {
-      console.error("Missing required parameters:", { campaignId, prompt });
-      return new Response(
-        JSON.stringify({ error: "Missing required parameters (campaignId or prompt)" }),
-        { 
-          status: 400, 
-          headers: { ...corsHeaders, "Content-Type": "application/json" }
-        }
-      );
+      throw new Error("Missing required parameters: campaignId and prompt");
     }
 
-    // Get the brand guidelines for the user
-    const { data: brandData, error: brandError } = await supabase
-      .from("brand_guidelines")
+    // Create a Supabase client
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // Fetch campaign data
+    const { data: campaignData, error: campaignError } = await supabase
+      .from("campaigns")
       .select("*")
-      .maybeSingle();
+      .eq("id", campaignId)
+      .single();
 
-    if (brandError) {
-      console.error("Error fetching brand guidelines:", brandError);
-      // Continue with default brand values
+    if (campaignError) {
+      throw new Error(`Campaign fetch error: ${campaignError.message}`);
     }
 
-    // Check if brand data exists and use defaults if not
-    const brand = brandData
-      ? brandData 
-      : {
-        brand_name: "Your Brand",
-        brand_tone: "Professional",
-        brand_voice: "Clear, helpful",
-        primary_color: "Not specified",
-        secondary_color: "Not specified",
-        do_not_use_phrases: ""
-      };
+    // Format brand guidelines for the OpenAI prompt
+    const brandInfo = brandGuidelines
+      ? `
+Brand Guidelines:
+- Brand Name: ${brandGuidelines.brand_name}
+- Tone: ${brandGuidelines.brand_tone}
+- Brand Colors: ${brandGuidelines.primary_color}, ${brandGuidelines.secondary_color}
+- Tagline: ${brandGuidelines.sample_tagline || "None provided"}
+- Do Not Use Phrases: ${brandGuidelines.do_not_use_phrases || "None specified"}
+`
+      : `
+Brand Guidelines:
+- Brand Name: Unknown
+- Tone: Professional and friendly
+- Brand Colors: #6366F1, #0EA5E9
+- Tagline: None provided
+- Do Not Use Phrases: None specified
+`;
 
-    // Prepare the system prompt for OpenAI
-    const systemPrompt = `
-      You are an AI marketing assistant for ${brand.brand_name}.  
-      Generate marketing campaign recommendations based on the given prompt, brand guidelines, and reference data.
-      
-      Brand Guidelines:
-      - Tone: ${brand.brand_tone || 'Professional'}
-      - Voice: ${brand.brand_voice || 'Clear, helpful'}
-      - Brand Colors: Primary: ${brand.primary_color || 'Not specified'}, Secondary: ${brand.secondary_color || 'Not specified'}
-      - Brand Identity: Premium airline focused on customer comfort
-      - Industry Specifics: Aviation, travel, hospitality
-      ${brand.do_not_use_phrases ? `- Do Not Use: ${brand.do_not_use_phrases}` : ''}
-      
-      User Prompt:
-      Generate a marketing campaign with the following:
-      - Campaign brief: ${prompt}
-      - Primary channel: ${primaryChannel}
-      - Content type: ${contentType}
-      - Budget: ${budget || 'Not specified'}
-      
-      Return:
-      - Three micro-cohorts with descriptions and demographics  
-      - Three recommended channels  
-      - Two creative recommendations per cohort (headline, description, CTA, image prompt)
-    `;
+    // Construct the prompt for OpenAI
+    const openAIPrompt = `
+You are a marketing strategist veteran working with the aviation sector for the last 25 years. You follow David Ogilvy advertising principles.
 
-    console.log("Calling OpenAI API with prompt...");
+Based on the following brand guidelines and campaign brief, generate intelligent campaign recommendations.
 
-    // Call OpenAI API
-    let openaiResponse;
+---
+${brandInfo}
+
+Campaign Brief:
+${prompt}
+
+Budget: ${budget}
+
+---
+
+Your task:
+
+1. Generate 2 micro-cohorts likely to perform well for this campaign.
+For each cohort, provide:
+- Title
+- Description (who they are and what motivates them)
+- Demographic info (age, location, traits)
+- Estimated reach (use placeholder if unknown)
+
+Output the results as JSON with the following structure:
+{
+  "microCohorts": [
+    {
+      "title": "Cohort title",
+      "description": "Detailed description",
+      "demographics": "Age, location, traits list",
+      "estimatedReach": "Reach estimate"
+    }
+  ]
+}
+
+Only return the JSON result, no other text. Ensure the JSON is valid and properly formatted.
+`;
+
+    // Call OpenAI API to generate recommendations
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${openAIKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content: "You generate structured marketing recommendations in JSON format only.",
+          },
+          {
+            role: "user",
+            content: openAIPrompt,
+          },
+        ],
+        temperature: 0.7,
+      }),
+    });
+
+    const openAIResponse = await response.json();
+    
+    if (!openAIResponse.choices || openAIResponse.choices.length === 0) {
+      throw new Error("Invalid response from OpenAI");
+    }
+
+    // Parse the JSON response from OpenAI
+    const content = openAIResponse.choices[0].message.content;
+    let generatedData;
+    
     try {
-      openaiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${openaiApiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "gpt-4o",
-          messages: [
-            {
-              role: "system",
-              content: systemPrompt
-            }
-          ],
-          temperature: 0.7,
-          max_tokens: 2000,
-        }),
-      });
-
-      if (!openaiResponse.ok) {
-        const errorData = await openaiResponse.json();
-        console.error("Error from OpenAI API:", errorData);
-        return new Response(
-          JSON.stringify({ error: "Error calling OpenAI API", details: errorData }),
-          { 
-            status: 500, 
-            headers: { ...corsHeaders, "Content-Type": "application/json" }
-          }
-        );
-      }
-
-      const openaiData = await openaiResponse.json();
-      const generatedContent = openaiData.choices[0].message.content;
-      console.log("OpenAI API response received successfully");
-
-      // Parse the generated content and format it
-      let parsedContent;
-      try {
-        // Try to parse as JSON if the response is JSON formatted
-        parsedContent = JSON.parse(generatedContent);
-      } catch (e) {
-        console.log("Content is not JSON, parsing as text");
-        // If not JSON, structure the text output
-        parsedContent = {
-          rawContent: generatedContent,
-          microCohorts: [],
-          recommendedChannels: []
-        };
-
-        // Basic parsing of the text to extract cohorts (very simplified)
-        const cohortMatches = generatedContent.match(/Cohort \d+[\s\S]*?(?=Cohort \d+|$)/g);
-        if (cohortMatches) {
-          parsedContent.microCohorts = cohortMatches.map((match: string, index: number) => {
-            const title = match.match(/Cohort \d+: ([^\n]+)/)?.[1] || `Cohort ${index + 1}`;
-            const description = match.match(/Description: ([^\n]+)/)?.[1] || "No description provided";
-            const demographics = match.match(/Demographics: ([^\n]+)/)?.[1] || "No demographics provided";
-            
-            const creatives = [];
-            const creativeMatches = match.match(/Creative \d+[\s\S]*?(?=Creative \d+|$)/g);
-            if (creativeMatches) {
-              creativeMatches.forEach((creative: string) => {
-                const headline = creative.match(/Headline: ([^\n]+)/)?.[1] || "No headline provided";
-                const description = creative.match(/Description: ([^\n]+)/)?.[1] || "No description provided";
-                const cta = creative.match(/CTA: ([^\n]+)/)?.[1] || "Learn More";
-                const imagePrompt = creative.match(/Image Prompt: ([^\n]+)/)?.[1] || "No image prompt provided";
-                
-                creatives.push({
-                  headline,
-                  description,
-                  cta,
-                  imagePrompt
-                });
-              });
-            }
-            
-            return {
-              title,
-              description,
-              demographics,
-              creatives
-            };
-          });
-        }
-        
-        // Extract recommended channels
-        const channelsMatch = generatedContent.match(/Recommended Channels:[\s\S]*?(?=\n\n|$)/);
-        if (channelsMatch) {
-          const channelsText = channelsMatch[0];
-          const channels = channelsText.match(/\d+\.\s*([^\n]+)/g);
-          if (channels) {
-            parsedContent.recommendedChannels = channels.map((channel: string) => 
-              channel.replace(/^\d+\.\s*/, '').trim()
-            );
-          }
-        }
-      }
-
-      console.log("Successfully generated and parsed content");
-
-      // Return the OpenAI response
-      return new Response(
-        JSON.stringify(parsedContent),
-        { 
-          status: 200, 
-          headers: { ...corsHeaders, "Content-Type": "application/json" }
-        }
-      );
-    } catch (error) {
-      console.error("Network error calling OpenAI API:", error);
-      return new Response(
-        JSON.stringify({ error: "Network error calling OpenAI API", details: error.message }),
-        { 
-          status: 500, 
-          headers: { ...corsHeaders, "Content-Type": "application/json" }
-        }
-      );
+      // Extract the JSON part from the response
+      const jsonMatch = content.match(/(\{[\s\S]*\})/);
+      const jsonString = jsonMatch ? jsonMatch[0] : content;
+      generatedData = JSON.parse(jsonString);
+    } catch (e) {
+      console.error("Error parsing OpenAI JSON response:", e);
+      console.log("Raw content:", content);
+      throw new Error("Failed to parse AI response as JSON");
     }
+
+    // Save the generated micro-cohorts to the database
+    if (generatedData && generatedData.microCohorts) {
+      for (const cohort of generatedData.microCohorts) {
+        const { error: cohortError } = await supabase.from("micro_cohorts").insert({
+          campaign_id: campaignId,
+          title: cohort.title,
+          description: cohort.description,
+          demographics: cohort.demographics,
+          recommended_channels: ["social", "email", "display"]
+        });
+
+        if (cohortError) {
+          console.error("Error inserting cohort:", cohortError);
+        }
+      }
+    }
+
+    // Return the generated data
+    return new Response(JSON.stringify(generatedData), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   } catch (error) {
-    console.error("Error generating campaign:", error);
+    console.error("Error in generate-campaign function:", error);
     return new Response(
-      JSON.stringify({ error: "Internal Server Error", details: error.message }),
-      { 
-        status: 500, 
-        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      JSON.stringify({ error: error.message || "Unknown error" }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       }
     );
   }

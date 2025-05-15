@@ -12,6 +12,8 @@ import BrandGuidelines from "./pages/BrandGuidelines";
 import Dashboard from "./pages/Dashboard";
 import Profile from "./pages/Profile";
 import CreateCampaign from "./pages/CreateCampaign";
+import MicroCohorts from "./pages/MicroCohorts";
+import GenerateCreatives from "./pages/GenerateCreatives";
 import CampaignReview from "./pages/CampaignReview";
 import NotFound from "./pages/NotFound";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -47,6 +49,16 @@ const App = () => (
             <Route path="/create-campaign" element={
               <ProtectedRoute>
                 <CreateCampaign />
+              </ProtectedRoute>
+            } />
+            <Route path="/micro-cohorts/:id" element={
+              <ProtectedRoute>
+                <MicroCohorts />
+              </ProtectedRoute>
+            } />
+            <Route path="/generate-creatives/:id" element={
+              <ProtectedRoute>
+                <GenerateCreatives />
               </ProtectedRoute>
             } />
             <Route path="/campaign-review/:id" element={

@@ -1,11 +1,13 @@
+
 import React from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { 
   LayoutDashboard, 
   User, 
+  Plus,
   Settings,
   ChevronLeft, 
   ChevronRight 
@@ -19,6 +21,7 @@ const SidebarLayout: React.FC<SidebarLayoutProps> = ({ children }) => {
   const [collapsed, setCollapsed] = React.useState(false);
   const { signOut } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
   
   const navItems = [
     {
@@ -27,19 +30,29 @@ const SidebarLayout: React.FC<SidebarLayoutProps> = ({ children }) => {
       href: '/dashboard',
     },
     {
+      icon: <Plus className="h-5 w-5" />,
+      label: 'New Campaign',
+      href: '/create-campaign',
+    },
+    {
       icon: <User className="h-5 w-5" />,
       label: 'Profile',
       href: '/profile',
     },
     {
       icon: <Settings className="h-5 w-5" />,
-      label: 'Settings',
-      href: '/settings', // Not implemented yet
+      label: 'Brand Guidelines',
+      href: '/brand-guidelines',
     },
   ];
 
+  const handleSignOut = async () => {
+    await signOut();
+    navigate('/login');
+  };
+
   return (
-    <div className="flex min-h-screen bg-aviation-lightGray">
+    <div className="flex min-h-screen bg-[#FAFAFB]">
       {/* Sidebar */}
       <div
         className={cn(
@@ -51,14 +64,14 @@ const SidebarLayout: React.FC<SidebarLayoutProps> = ({ children }) => {
         <div className="p-4 border-b border-gray-200 flex items-center justify-between">
           {!collapsed && (
             <Link to="/dashboard" className="flex items-center">
-              <div className="h-8 w-8 rounded-md bg-aviation-blue flex items-center justify-center">
+              <div className="h-8 w-8 rounded-md bg-indigo-600 flex items-center justify-center">
                 <span className="text-white font-bold">IR</span>
               </div>
               <span className="ml-2 font-medium text-lg">IntelliReach</span>
             </Link>
           )}
           {collapsed && (
-            <div className="h-8 w-8 rounded-md bg-aviation-blue mx-auto flex items-center justify-center">
+            <div className="h-8 w-8 rounded-md bg-indigo-600 mx-auto flex items-center justify-center">
               <span className="text-white font-bold">IR</span>
             </div>
           )}
@@ -82,7 +95,7 @@ const SidebarLayout: React.FC<SidebarLayoutProps> = ({ children }) => {
                 className={cn(
                   "flex items-center px-2 py-2 text-sm font-medium rounded-md",
                   location.pathname === item.href
-                    ? "bg-aviation-lightBlue text-aviation-blue"
+                    ? "bg-indigo-50 text-indigo-600"
                     : "text-gray-600 hover:bg-gray-100"
                 )}
               >
@@ -107,7 +120,7 @@ const SidebarLayout: React.FC<SidebarLayoutProps> = ({ children }) => {
           ) : (
             <Button
               variant="outline"
-              onClick={() => signOut()}
+              onClick={handleSignOut}
               className="w-full text-gray-600"
             >
               Sign Out

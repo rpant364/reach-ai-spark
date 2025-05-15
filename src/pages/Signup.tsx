@@ -36,7 +36,8 @@ const Signup = () => {
   
   // Redirect if already logged in
   if (user) {
-    navigate("/dashboard");
+    navigate("/brand-guidelines");
+    return null;
   }
   
   const form = useForm<z.infer<typeof formSchema>>({
@@ -52,7 +53,8 @@ const Signup = () => {
     try {
       setIsLoading(true);
       await signUp(values.email, values.password);
-      toast.success("Account created! Please check your email for a verification link.");
+      toast.success("Account created successfully! You can now log in.");
+      navigate('/login');
     } catch (error: any) {
       console.error("Signup failed:", error);
       // Error is already handled in the signUp function with toast
@@ -62,10 +64,10 @@ const Signup = () => {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-aviation-lightGray">
+    <div className="min-h-screen flex items-center justify-center bg-[#FAFAFB]">
       <div className="w-full max-w-md px-4">
         <div className="mb-8 text-center">
-          <div className="mx-auto h-12 w-12 rounded-lg bg-aviation-blue flex items-center justify-center">
+          <div className="mx-auto h-12 w-12 rounded-lg bg-indigo-600 flex items-center justify-center">
             <span className="text-white font-bold text-xl">IR</span>
           </div>
           <h1 className="mt-3 text-2xl font-bold text-gray-900">IntelliReach</h1>
@@ -123,7 +125,7 @@ const Signup = () => {
                     </FormItem>
                   )}
                 />
-                <Button type="submit" className="w-full bg-aviation-blue hover:bg-aviation-indigo" disabled={isLoading}>
+                <Button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700" disabled={isLoading}>
                   {isLoading ? "Creating account..." : "Create Account"}
                 </Button>
               </form>
@@ -132,7 +134,7 @@ const Signup = () => {
           <CardFooter className="flex justify-center border-t pt-4">
             <div className="text-sm text-gray-600">
               Already have an account?{" "}
-              <Link to="/login" className="font-medium text-aviation-blue hover:text-aviation-indigo">
+              <Link to="/login" className="font-medium text-indigo-600 hover:text-indigo-700">
                 Log in
               </Link>
             </div>

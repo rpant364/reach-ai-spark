@@ -25,12 +25,17 @@ const formSchema = z.object({
 
 const Login = () => {
   const navigate = useNavigate();
-  const { signIn, user } = useAuth();
+  const { signIn, user, hasBrandGuidelines } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   
   // Redirect if already logged in
   if (user) {
-    navigate("/dashboard");
+    if (hasBrandGuidelines) {
+      navigate("/dashboard");
+    } else {
+      navigate("/brand-guidelines");
+    }
+    return null;
   }
   
   const form = useForm<z.infer<typeof formSchema>>({
@@ -45,7 +50,7 @@ const Login = () => {
     try {
       setIsLoading(true);
       await signIn(values.email, values.password);
-      navigate("/dashboard");
+      // Redirection will happen via the useEffect in the component
     } catch (error: any) {
       console.error("Login failed:", error);
       // Error is already handled in the signIn function with toast
@@ -55,10 +60,10 @@ const Login = () => {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-aviation-lightGray">
+    <div className="min-h-screen flex items-center justify-center bg-[#FAFAFB]">
       <div className="w-full max-w-md px-4">
         <div className="mb-8 text-center">
-          <div className="mx-auto h-12 w-12 rounded-lg bg-aviation-blue flex items-center justify-center">
+          <div className="mx-auto h-12 w-12 rounded-lg bg-indigo-600 flex items-center justify-center">
             <span className="text-white font-bold text-xl">IR</span>
           </div>
           <h1 className="mt-3 text-2xl font-bold text-gray-900">IntelliReach</h1>
@@ -103,7 +108,7 @@ const Login = () => {
                     </FormItem>
                   )}
                 />
-                <Button type="submit" className="w-full bg-aviation-blue hover:bg-aviation-indigo" disabled={isLoading}>
+                <Button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700" disabled={isLoading}>
                   {isLoading ? "Logging in..." : "Log in"}
                 </Button>
               </form>
@@ -112,7 +117,7 @@ const Login = () => {
           <CardFooter className="flex justify-center border-t pt-4">
             <div className="text-sm text-gray-600">
               Don't have an account?{" "}
-              <Link to="/signup" className="font-medium text-aviation-blue hover:text-aviation-indigo">
+              <Link to="/signup" className="font-medium text-indigo-600 hover:text-indigo-700">
                 Sign up
               </Link>
             </div>

@@ -4,5 +4,8 @@ project_id = "pyfalkapifuntkkbygcl"
 [functions.generate-campaign]
 verify_jwt = true
 
+[functions.generate-creatives]
+verify_jwt = true
+
 [functions.generate-image]
 verify_jwt = true
