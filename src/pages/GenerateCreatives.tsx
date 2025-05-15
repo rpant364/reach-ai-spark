@@ -446,17 +446,19 @@ const GenerateCreatives = () => {
                       <h4 className="text-sm font-medium text-gray-500 mb-2">Generated Image</h4>
                       <div className="border rounded-md overflow-hidden bg-gray-100">
                         {generatingImages.has(creative.id) ? (
-                          <div className="w-full h-48 flex items-center justify-center">
+                          <div className="w-full h-[400px] flex items-center justify-center">
                             <div className="w-10 h-10 border-4 border-t-indigo-600 rounded-full animate-spin"></div>
                           </div>
                         ) : creative.image_url ? (
-                          <img
-                            src={creative.image_url}
-                            alt={creative.headline}
-                            className="object-cover w-full h-48"
-                          />
+                          <div className="relative w-full h-[400px] flex items-center justify-center overflow-hidden">
+                            <img
+                              src={creative.image_url}
+                              alt={creative.headline}
+                              className="w-full h-full object-contain"
+                            />
+                          </div>
                         ) : (
-                          <div className="w-full h-48 flex flex-col items-center justify-center">
+                          <div className="w-full h-[400px] flex flex-col items-center justify-center">
                             <p className="text-gray-400 mb-3">No image generated yet</p>
                             <Button
                               onClick={() => generateImage(creative.id, creative.image_prompt)}

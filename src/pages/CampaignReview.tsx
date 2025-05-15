@@ -447,17 +447,19 @@ const CampaignReview = () => {
                 {campaign.cohorts.flatMap(cohort => 
                   cohort.creatives.map(creative => (
                     <Card key={creative.id} className="border shadow-sm overflow-hidden">
-                      <div className="aspect-[4/3] relative bg-gray-100">
+                      <div className="aspect-square relative bg-gray-100">
                         {generatingImages.has(creative.id) ? (
                           <div className="w-full h-full flex items-center justify-center">
                             <div className="w-10 h-10 border-4 border-t-aviation-blue rounded-full animate-spin"></div>
                           </div>
                         ) : creative.image_url ? (
-                          <img 
-                            src={creative.image_url} 
-                            alt={creative.headline} 
-                            className="object-cover w-full h-full" 
-                          />
+                          <div className="w-full h-full flex items-center justify-center">
+                            <img 
+                              src={creative.image_url} 
+                              alt={creative.headline} 
+                              className="w-full h-full object-contain" 
+                            />
+                          </div>
                         ) : (
                           <div className="w-full h-full flex flex-col items-center justify-center p-4">
                             <p className="text-gray-400 text-center mb-2">Image not yet generated</p>
@@ -586,17 +588,19 @@ const CampaignReview = () => {
                             <h3 className="text-sm font-medium text-gray-500 mb-2">Generated Image</h3>
                             <div className="border rounded-md overflow-hidden bg-gray-100">
                               {generatingImages.has(creative.id) ? (
-                                <div className="w-full h-64 flex items-center justify-center">
+                                <div className="w-full h-[400px] flex items-center justify-center">
                                   <div className="w-10 h-10 border-4 border-t-aviation-blue rounded-full animate-spin"></div>
                                 </div>
                               ) : creative.image_url ? (
-                                <img 
-                                  src={creative.image_url} 
-                                  alt={creative.headline} 
-                                  className="object-contain w-full h-64" 
-                                />
+                                <div className="w-full h-[400px] flex items-center justify-center">
+                                  <img 
+                                    src={creative.image_url} 
+                                    alt={creative.headline} 
+                                    className="w-full h-full object-contain" 
+                                  />
+                                </div>
                               ) : (
-                                <div className="w-full h-64 flex flex-col items-center justify-center">
+                                <div className="w-full h-[400px] flex flex-col items-center justify-center">
                                   <p className="text-gray-400 mb-3">No image generated yet</p>
                                   <Button
                                     onClick={() => generateImage(creative.id, creative.image_prompt || "")}
