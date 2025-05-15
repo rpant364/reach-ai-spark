@@ -8,9 +8,10 @@ const Index = () => {
   const { user, loading, hasBrandGuidelines } = useAuth();
 
   useEffect(() => {
+    // Only redirect when loading is complete
     if (!loading) {
       if (user) {
-        // If user is logged in, redirect to the appropriate page
+        // If user is logged in, check if they've completed brand guidelines
         if (hasBrandGuidelines) {
           navigate("/dashboard");
         } else {

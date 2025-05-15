@@ -24,6 +24,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [hasBrandGuidelines, setHasBrandGuidelines] = useState(false);
 
   useEffect(() => {
+    // Check localStorage for brand guidelines status first
+    const storedBrandGuidelines = localStorage.getItem('hasBrandGuidelines');
+    if (storedBrandGuidelines === 'true') {
+      setHasBrandGuidelines(true);
+    }
+
     // Set up the auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
@@ -32,6 +38,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         
         if (session?.user) {
           checkBrandGuidelines(session.user.id);
+        } else {
+          // Reset brand guidelines status when signed out
+          setHasBrandGuidelines(false);
+          localStorage.removeItem('hasBrandGuidelines');
         }
       }
     );
@@ -65,7 +75,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         console.error('Error checking brand guidelines:', error);
         setHasBrandGuidelines(false);
       } else {
-        setHasBrandGuidelines(!!data);
+        const hasGuidelines = !!data;
+        setHasBrandGuidelines(hasGuidelines);
+        localStorage.setItem('hasBrandGuidelines', hasGuidelines.toString());
       }
     } catch (error) {
       console.error('Error checking brand guidelines:', error);
