@@ -24,7 +24,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [hasBrandGuidelines, setHasBrandGuidelines] = useState(false);
 
   useEffect(() => {
-    // Check localStorage for brand guidelines status first
+    // Check localStorage for brand guidelines status first (for immediate UI feedback)
     const storedBrandGuidelines = localStorage.getItem('hasBrandGuidelines');
     if (storedBrandGuidelines === 'true') {
       setHasBrandGuidelines(true);
@@ -37,6 +37,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setUser(session?.user ?? null);
         
         if (session?.user) {
+          // Always check Supabase for the source of truth
           checkBrandGuidelines(session.user.id);
         } else {
           // Reset brand guidelines status when signed out
@@ -71,12 +72,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         .eq('user_id', userId)
         .single();
 
-      if (error) {
+      if (error && error.code !== 'PGRST116') {  // PGRST116 is "no rows returned"
         console.error('Error checking brand guidelines:', error);
         setHasBrandGuidelines(false);
       } else {
         const hasGuidelines = !!data;
         setHasBrandGuidelines(hasGuidelines);
+        // Set localStorage for immediate UI feedback on page reloads
         localStorage.setItem('hasBrandGuidelines', hasGuidelines.toString());
       }
     } catch (error) {

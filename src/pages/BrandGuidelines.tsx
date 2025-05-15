@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 const formSchema = z.object({
   brandName: z.string().min(2, { message: "Brand name must be at least 2 characters" }),
@@ -39,7 +40,7 @@ const formSchema = z.object({
 
 const BrandGuidelines = () => {
   const navigate = useNavigate();
-  const { setHasBrandGuidelines } = useAuth();
+  const { user, setHasBrandGuidelines } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   
   const form = useForm<z.infer<typeof formSchema>>({
@@ -63,17 +64,37 @@ const BrandGuidelines = () => {
   async function onSubmit(values: z.infer<typeof formSchema>) {
     try {
       setIsLoading(true);
-      // In a real app, this would save to Supabase
-      console.log("Brand guidelines:", values);
       
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      if (!user) {
+        toast.error("You must be logged in to save brand guidelines");
+        return;
+      }
       
-      // Update auth context and local storage
+      // Save to Supabase brand_guidelines table
+      const { error } = await supabase
+        .from('brand_guidelines')
+        .insert({
+          user_id: user.id,
+          brand_name: values.brandName,
+          brand_tone: values.brandTone,
+          brand_voice: values.brandVoice || null,
+          primary_color: values.primaryColor,
+          secondary_color: values.secondaryColor,
+          sample_tagline: values.sampleTagline || null,
+          do_not_use_phrases: values.doNotUse || null
+        });
+      
+      if (error) {
+        console.error("Error saving to Supabase:", error);
+        toast.error("Failed to save brand guidelines. Please try again.");
+        return;
+      }
+      
+      // Update auth context and local storage for immediate UI feedback
       setHasBrandGuidelines(true);
       localStorage.setItem('hasBrandGuidelines', 'true');
       
-      // Save to local storage for demo purposes
+      // Also save to local storage for demo purposes (this can be removed in a production app)
       localStorage.setItem('brandGuidelines', JSON.stringify(values));
       
       toast.success("Brand guidelines saved successfully!");
