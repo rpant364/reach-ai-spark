@@ -1,7 +1,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.7.1";
-import { Replicate } from "https://esm.sh/replicate@0.25.2";
+import Replicate from "https://esm.sh/replicate@0.25.2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -39,8 +39,9 @@ serve(async (req) => {
     console.log("Generating image with prompt:", prompt);
 
     // Call Replicate API to generate an image with ideogramv2 model
+    // Using the correct model identifier for ideogram-v2
     const output = await replicate.run(
-      "ideogram/ideogram-v2:9d5a6b19234de4addf2fe28809be14dc6acd6edc3bc9b0b3f495be5941a4e144",
+      "ideogram-ai/ideogram-v2:9d5a6b19234de4addf2fe28809be14dc6acd6edc3bc9b0b3f495be5941a4e144",
       {
         input: {
           prompt: prompt,
