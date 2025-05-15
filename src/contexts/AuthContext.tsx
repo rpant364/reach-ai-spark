@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
@@ -66,6 +65,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   // Check if user has completed brand guidelines
   const checkBrandGuidelines = async (userId: string) => {
     try {
+      console.log("Checking brand guidelines for user:", userId);
+      
       const { data, error } = await supabase
         .from('brand_guidelines')
         .select('id')
@@ -75,8 +76,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       if (error && error.code !== 'PGRST116') {  // PGRST116 is "no rows returned"
         console.error('Error checking brand guidelines:', error);
         setHasBrandGuidelines(false);
+        localStorage.setItem('hasBrandGuidelines', 'false');
       } else {
         const hasGuidelines = !!data;
+        console.log("User has brand guidelines:", hasGuidelines, data);
         setHasBrandGuidelines(hasGuidelines);
         // Set localStorage for immediate UI feedback on page reloads
         localStorage.setItem('hasBrandGuidelines', hasGuidelines.toString());
@@ -84,6 +87,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     } catch (error) {
       console.error('Error checking brand guidelines:', error);
       setHasBrandGuidelines(false);
+      localStorage.setItem('hasBrandGuidelines', 'false');
     }
   };
 

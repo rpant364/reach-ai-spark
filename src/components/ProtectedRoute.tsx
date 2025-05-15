@@ -18,22 +18,25 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
     );
   }
   
+  // If user is not logged in, redirect to login
   if (!user) {
+    console.log("Protected route: User not logged in, redirecting to login");
     return <Navigate to="/login" replace />;
   }
   
-  // If user hasn't completed brand guidelines and trying to access a different page
+  // If user hasn't completed brand guidelines and trying to access a route other than brand-guidelines
   if (!hasBrandGuidelines && location.pathname !== '/brand-guidelines') {
-    console.log("Redirecting to brand guidelines. Current path:", location.pathname);
+    console.log("Protected route: User hasn't completed brand guidelines, redirecting to brand guidelines");
     return <Navigate to="/brand-guidelines" replace />;
   }
   
-  // If user has completed brand guidelines and tries to access brand-guidelines page
+  // Special case: If user has completed brand guidelines and tries to access brand-guidelines page
   if (hasBrandGuidelines && location.pathname === '/brand-guidelines') {
-    console.log("User already has brand guidelines, redirecting to dashboard");
+    console.log("Protected route: User already has brand guidelines, redirecting to dashboard");
     return <Navigate to="/dashboard" replace />;
   }
   
+  // User is authenticated and has appropriate access
   return <>{children}</>;
 };
 

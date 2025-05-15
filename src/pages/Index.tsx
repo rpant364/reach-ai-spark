@@ -8,19 +8,26 @@ const Index = () => {
   const { user, loading, hasBrandGuidelines } = useAuth();
 
   useEffect(() => {
-    // Only redirect when loading is complete
-    if (!loading) {
-      if (user) {
-        // If user is logged in, check if they've completed brand guidelines
-        if (hasBrandGuidelines) {
-          navigate("/dashboard");
-        } else {
-          navigate("/brand-guidelines");
-        }
-      } else {
-        // If no user, redirect to login
-        navigate("/login");
-      }
+    if (loading) {
+      // Don't do anything while authentication is loading
+      return;
+    }
+    
+    if (!user) {
+      // User is not logged in, redirect to login page
+      console.log("User not logged in, redirecting to login");
+      navigate("/login");
+      return;
+    }
+    
+    // User is logged in, check if they've completed brand guidelines
+    console.log("User logged in, hasBrandGuidelines:", hasBrandGuidelines);
+    if (hasBrandGuidelines) {
+      console.log("User has completed brand guidelines, redirecting to dashboard");
+      navigate("/dashboard");
+    } else {
+      console.log("User has not completed brand guidelines, redirecting to brand guidelines");
+      navigate("/brand-guidelines");
     }
   }, [user, loading, hasBrandGuidelines, navigate]);
 
