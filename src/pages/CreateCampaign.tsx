@@ -85,6 +85,8 @@ const CreateCampaign = () => {
         return;
       }
       
+      console.log("Campaign created successfully:", campaignData);
+      
       // Call the generate-campaign Edge Function to generate content
       const { data: generationData, error: generationError } = await supabase.functions.invoke(
         "generate-campaign",
@@ -101,13 +103,20 @@ const CreateCampaign = () => {
       
       if (generationError) {
         console.error("Error generating campaign:", generationError);
-        toast.error("Failed to generate campaign content");
+        toast.error(`Failed to generate campaign content: ${generationError.message || 'Unknown error'}`);
         setIsLoading(false);
         return;
       }
       
       // Process the generated content from OpenAI
       console.log("Generated content:", generationData);
+      
+      if (!generationData || (!generationData.microCohorts && !generationData.rawContent)) {
+        console.error("Invalid response from generate-campaign function:", generationData);
+        toast.error("Received invalid data from AI. Please try again.");
+        setIsLoading(false);
+        return;
+      }
       
       // Create micro-cohorts in the database
       if (generationData.microCohorts && generationData.microCohorts.length > 0) {
@@ -158,6 +167,36 @@ const CreateCampaign = () => {
             }
           }
         }
+      } else if (generationData.rawContent) {
+        // If we received rawContent instead of structured data, create a default cohort
+        console.log("Handling raw content response");
+        
+        const { data: cohortData, error: cohortError } = await supabase
+          .from("micro_cohorts")
+          .insert({
+            campaign_id: campaignData.id,
+            title: "AI Generated Cohort",
+            description: "Generated from your prompt",
+            demographics: "Based on your target audience",
+            recommended_channels: generationData.recommendedChannels || []
+          })
+          .select()
+          .single();
+          
+        if (cohortError) {
+          console.error("Error creating default cohort:", cohortError);
+        } else {
+          // Create a single creative with the raw content
+          await supabase
+            .from("campaign_creatives")
+            .insert({
+              cohort_id: cohortData.id,
+              headline: "AI Generated Content",
+              description: generationData.rawContent.substring(0, 1000), // Limit length
+              cta: "Learn More",
+              image_prompt: "A professional marketing image related to the campaign"
+            });
+        }
       }
       
       toast.success("Campaign created successfully!");
@@ -166,7 +205,7 @@ const CreateCampaign = () => {
       navigate(`/campaign-review/${campaignData.id}`);
     } catch (error) {
       console.error("Error creating campaign:", error);
-      toast.error("Failed to create campaign. Please try again.");
+      toast.error(`Failed to create campaign: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsLoading(false);
     }
