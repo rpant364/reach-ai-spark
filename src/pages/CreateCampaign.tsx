@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { z } from "zod";
@@ -28,11 +29,10 @@ import {
   Card,
   CardContent,
   CardDescription,
-  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
 const formSchema = z.object({
@@ -80,7 +80,11 @@ const CreateCampaign = () => {
       
       if (campaignError) {
         console.error("Error creating campaign:", campaignError);
-        toast.error("Failed to create campaign");
+        toast({
+          title: "Error",
+          description: "Failed to create campaign: " + campaignError.message,
+          variant: "destructive"
+        });
         setIsLoading(false);
         return;
       }
@@ -103,7 +107,15 @@ const CreateCampaign = () => {
       
       if (generationError) {
         console.error("Error generating campaign:", generationError);
-        toast.error(`Failed to generate campaign content: ${generationError.message || 'Unknown error'}`);
+        toast({
+          title: "Error",
+          description: `Failed to generate campaign content: ${generationError.message || 'Unknown error'}`,
+          variant: "destructive"
+        });
+        
+        // Navigate to the review page anyway, even if generation failed
+        // This allows the user to see what they created and try generating again
+        navigate(`/campaign-review/${campaignData.id}`);
         setIsLoading(false);
         return;
       }
@@ -113,7 +125,14 @@ const CreateCampaign = () => {
       
       if (!generationData || (!generationData.microCohorts && !generationData.rawContent)) {
         console.error("Invalid response from generate-campaign function:", generationData);
-        toast.error("Received invalid data from AI. Please try again.");
+        toast({
+          title: "Warning",
+          description: "Received invalid data from AI. You can try generating again in the review page.",
+          variant: "destructive"
+        });
+        
+        // Navigate to the review page anyway
+        navigate(`/campaign-review/${campaignData.id}`);
         setIsLoading(false);
         return;
       }
@@ -199,13 +218,20 @@ const CreateCampaign = () => {
         }
       }
       
-      toast.success("Campaign created successfully!");
+      toast({
+        title: "Success",
+        description: "Campaign created successfully!",
+      });
       
       // Navigate to review page
       navigate(`/campaign-review/${campaignData.id}`);
     } catch (error) {
       console.error("Error creating campaign:", error);
-      toast.error(`Failed to create campaign: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      toast({
+        title: "Error",
+        description: `Failed to create campaign: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        variant: "destructive"
+      });
     } finally {
       setIsLoading(false);
     }

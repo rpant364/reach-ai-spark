@@ -22,6 +22,8 @@ serve(async (req) => {
   }
 
   try {
+    console.log("Starting generate-campaign function");
+    
     // Check if OpenAI API key is available
     if (!openaiApiKey) {
       console.error("OpenAI API key not configured");
@@ -34,14 +36,20 @@ serve(async (req) => {
       );
     }
 
-    // Check if the request is authorized
+    // Create Supabase client for authentication check
     const supabase = createClient(supabaseUrl, supabaseAnonKey);
-    const { data: { session }, error: authError } = await supabase.auth.getSession();
+    
+    // Parse JWT from Authorization header
+    let jwt = null;
+    const authHeader = req.headers.get('Authorization');
 
-    if (authError || !session) {
-      console.error("Unauthorized access:", authError);
+    if (authHeader) {
+      jwt = authHeader.replace('Bearer ', '');
+      console.log("Authorization header found, JWT extracted");
+    } else {
+      console.error("No Authorization header found");
       return new Response(
-        JSON.stringify({ error: "Unauthorized", details: authError }),
+        JSON.stringify({ error: "No authorization header found" }),
         { 
           status: 401, 
           headers: { ...corsHeaders, "Content-Type": "application/json" }
@@ -49,13 +57,36 @@ serve(async (req) => {
       );
     }
 
-    // Get the user ID from the session
-    const userId = session.user.id;
+    // Get auth user from JWT
+    try {
+      const { data: { user }, error } = await supabase.auth.getUser(jwt);
+      if (error || !user) {
+        console.error("Failed to validate user JWT:", error);
+        return new Response(
+          JSON.stringify({ error: "Unauthorized: Invalid token", details: error }),
+          { 
+            status: 401, 
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          }
+        );
+      }
+      console.log("User authenticated successfully:", user.id);
+    } catch (authError) {
+      console.error("Error validating token:", authError);
+      return new Response(
+        JSON.stringify({ error: "Error validating authentication token", details: authError.message }),
+        { 
+          status: 401, 
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        }
+      );
+    }
 
     // Parse the request body
     let requestBody: RequestBody;
     try {
       requestBody = await req.json() as RequestBody;
+      console.log("Request body parsed:", requestBody);
     } catch (e) {
       console.error("Error parsing request body:", e);
       return new Response(
@@ -84,22 +115,16 @@ serve(async (req) => {
     const { data: brandData, error: brandError } = await supabase
       .from("brand_guidelines")
       .select("*")
-      .eq("user_id", userId);
+      .maybeSingle();
 
     if (brandError) {
       console.error("Error fetching brand guidelines:", brandError);
-      return new Response(
-        JSON.stringify({ error: "Error fetching brand guidelines", details: brandError }),
-        { 
-          status: 500, 
-          headers: { ...corsHeaders, "Content-Type": "application/json" }
-        }
-      );
+      // Continue with default brand values
     }
 
     // Check if brand data exists and use defaults if not
-    const brand = brandData && brandData.length > 0 
-      ? brandData[0] 
+    const brand = brandData
+      ? brandData 
       : {
         brand_name: "Your Brand",
         brand_tone: "Professional",
@@ -158,6 +183,95 @@ serve(async (req) => {
           max_tokens: 2000,
         }),
       });
+
+      if (!openaiResponse.ok) {
+        const errorData = await openaiResponse.json();
+        console.error("Error from OpenAI API:", errorData);
+        return new Response(
+          JSON.stringify({ error: "Error calling OpenAI API", details: errorData }),
+          { 
+            status: 500, 
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          }
+        );
+      }
+
+      const openaiData = await openaiResponse.json();
+      const generatedContent = openaiData.choices[0].message.content;
+      console.log("OpenAI API response received successfully");
+
+      // Parse the generated content and format it
+      let parsedContent;
+      try {
+        // Try to parse as JSON if the response is JSON formatted
+        parsedContent = JSON.parse(generatedContent);
+      } catch (e) {
+        console.log("Content is not JSON, parsing as text");
+        // If not JSON, structure the text output
+        parsedContent = {
+          rawContent: generatedContent,
+          microCohorts: [],
+          recommendedChannels: []
+        };
+
+        // Basic parsing of the text to extract cohorts (very simplified)
+        const cohortMatches = generatedContent.match(/Cohort \d+[\s\S]*?(?=Cohort \d+|$)/g);
+        if (cohortMatches) {
+          parsedContent.microCohorts = cohortMatches.map((match: string, index: number) => {
+            const title = match.match(/Cohort \d+: ([^\n]+)/)?.[1] || `Cohort ${index + 1}`;
+            const description = match.match(/Description: ([^\n]+)/)?.[1] || "No description provided";
+            const demographics = match.match(/Demographics: ([^\n]+)/)?.[1] || "No demographics provided";
+            
+            const creatives = [];
+            const creativeMatches = match.match(/Creative \d+[\s\S]*?(?=Creative \d+|$)/g);
+            if (creativeMatches) {
+              creativeMatches.forEach((creative: string) => {
+                const headline = creative.match(/Headline: ([^\n]+)/)?.[1] || "No headline provided";
+                const description = creative.match(/Description: ([^\n]+)/)?.[1] || "No description provided";
+                const cta = creative.match(/CTA: ([^\n]+)/)?.[1] || "Learn More";
+                const imagePrompt = creative.match(/Image Prompt: ([^\n]+)/)?.[1] || "No image prompt provided";
+                
+                creatives.push({
+                  headline,
+                  description,
+                  cta,
+                  imagePrompt
+                });
+              });
+            }
+            
+            return {
+              title,
+              description,
+              demographics,
+              creatives
+            };
+          });
+        }
+        
+        // Extract recommended channels
+        const channelsMatch = generatedContent.match(/Recommended Channels:[\s\S]*?(?=\n\n|$)/);
+        if (channelsMatch) {
+          const channelsText = channelsMatch[0];
+          const channels = channelsText.match(/\d+\.\s*([^\n]+)/g);
+          if (channels) {
+            parsedContent.recommendedChannels = channels.map((channel: string) => 
+              channel.replace(/^\d+\.\s*/, '').trim()
+            );
+          }
+        }
+      }
+
+      console.log("Successfully generated and parsed content");
+
+      // Return the OpenAI response
+      return new Response(
+        JSON.stringify(parsedContent),
+        { 
+          status: 200, 
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        }
+      );
     } catch (error) {
       console.error("Network error calling OpenAI API:", error);
       return new Response(
@@ -168,95 +282,6 @@ serve(async (req) => {
         }
       );
     }
-
-    if (!openaiResponse.ok) {
-      const errorData = await openaiResponse.json();
-      console.error("Error from OpenAI API:", errorData);
-      return new Response(
-        JSON.stringify({ error: "Error calling OpenAI API", details: errorData }),
-        { 
-          status: 500, 
-          headers: { ...corsHeaders, "Content-Type": "application/json" }
-        }
-      );
-    }
-
-    const openaiData = await openaiResponse.json();
-    const generatedContent = openaiData.choices[0].message.content;
-
-    // Parse the generated content and format it
-    let parsedContent;
-    try {
-      // Try to parse as JSON if the response is JSON formatted
-      parsedContent = JSON.parse(generatedContent);
-    } catch (e) {
-      console.log("Content is not JSON, parsing as text");
-      // If not JSON, structure the text output
-      parsedContent = {
-        rawContent: generatedContent,
-        microCohorts: [],
-        recommendedChannels: []
-      };
-
-      // Basic parsing of the text to extract cohorts (very simplified)
-      const cohortMatches = generatedContent.match(/Cohort \d+[\s\S]*?(?=Cohort \d+|$)/g);
-      if (cohortMatches) {
-        parsedContent.microCohorts = cohortMatches.map((match: string, index: number) => {
-          const title = match.match(/Cohort \d+: ([^\n]+)/)?.[1] || `Cohort ${index + 1}`;
-          const description = match.match(/Description: ([^\n]+)/)?.[1] || "No description provided";
-          const demographics = match.match(/Demographics: ([^\n]+)/)?.[1] || "No demographics provided";
-          
-          const creatives = [];
-          const creativeMatches = match.match(/Creative \d+[\s\S]*?(?=Creative \d+|$)/g);
-          if (creativeMatches) {
-            creativeMatches.forEach((creative: string) => {
-              const headline = creative.match(/Headline: ([^\n]+)/)?.[1] || "No headline provided";
-              const description = creative.match(/Description: ([^\n]+)/)?.[1] || "No description provided";
-              const cta = creative.match(/CTA: ([^\n]+)/)?.[1] || "Learn More";
-              const imagePrompt = creative.match(/Image Prompt: ([^\n]+)/)?.[1] || "No image prompt provided";
-              
-              creatives.push({
-                headline,
-                description,
-                cta,
-                imagePrompt
-              });
-            });
-          }
-          
-          return {
-            title,
-            description,
-            demographics,
-            creatives
-          };
-        });
-      }
-      
-      // Extract recommended channels
-      const channelsMatch = generatedContent.match(/Recommended Channels:[\s\S]*?(?=\n\n|$)/);
-      if (channelsMatch) {
-        const channelsText = channelsMatch[0];
-        const channels = channelsText.match(/\d+\.\s*([^\n]+)/g);
-        if (channels) {
-          parsedContent.recommendedChannels = channels.map((channel: string) => 
-            channel.replace(/^\d+\.\s*/, '').trim()
-          );
-        }
-      }
-    }
-
-    console.log("Successfully generated and parsed content");
-
-    // Return the OpenAI response
-    return new Response(
-      JSON.stringify(parsedContent),
-      { 
-        status: 200, 
-        headers: { ...corsHeaders, "Content-Type": "application/json" }
-      }
-    );
-
   } catch (error) {
     console.error("Error generating campaign:", error);
     return new Response(
