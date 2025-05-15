@@ -4,9 +4,18 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import SidebarLayout from "@/components/layouts/SidebarLayout";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Plus, LayoutDashboard } from "lucide-react";
+import { Plus, LayoutDashboard, Calendar, Users, ArrowUpRight } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
 
 interface Campaign {
   id: string;
@@ -100,6 +109,57 @@ const Dashboard = () => {
     </div>
   );
 
+  // Stats display
+  const StatsCards = () => (
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+      <Card className="bg-white shadow-sm">
+        <CardContent className="pt-6">
+          <div className="flex items-center gap-2">
+            <div className="bg-indigo-100 p-2 rounded">
+              <LayoutDashboard className="h-5 w-5 text-indigo-600" />
+            </div>
+            <div className="flex flex-col">
+              <p className="text-sm text-gray-500">Total Campaigns</p>
+              <p className="text-2xl font-semibold">{campaigns.length}</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+      
+      <Card className="bg-white shadow-sm">
+        <CardContent className="pt-6">
+          <div className="flex items-center gap-2">
+            <div className="bg-green-100 p-2 rounded">
+              <Calendar className="h-5 w-5 text-green-600" />
+            </div>
+            <div className="flex flex-col">
+              <p className="text-sm text-gray-500">Active Campaigns</p>
+              <p className="text-2xl font-semibold">
+                {campaigns.filter(c => c.status === 'active').length}
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+      
+      <Card className="bg-white shadow-sm">
+        <CardContent className="pt-6">
+          <div className="flex items-center gap-2">
+            <div className="bg-blue-100 p-2 rounded">
+              <Users className="h-5 w-5 text-blue-600" />
+            </div>
+            <div className="flex flex-col">
+              <p className="text-sm text-gray-500">Total Cohorts</p>
+              <p className="text-2xl font-semibold">
+                {campaigns.reduce((total, campaign) => total + campaign.cohort_count, a => 0)}
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+
   return (
     <SidebarLayout>
       <div className="space-y-6">
@@ -119,6 +179,8 @@ const Dashboard = () => {
           </Button>
         </div>
         
+        <Separator className="my-6" />
+        
         {loading ? (
           <div className="flex justify-center py-10">
             <div className="w-10 h-10 border-4 border-t-indigo-600 rounded-full animate-spin"></div>
@@ -130,38 +192,63 @@ const Dashboard = () => {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid gap-6">
-            {campaigns.map((campaign) => (
-              <Card key={campaign.id} className="border shadow-sm hover:shadow-md transition-shadow">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-xl">{campaign.title}</CardTitle>
-                  <CardDescription className="flex justify-between">
-                    <span>Created {formatDate(campaign.created_at)}</span>
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium 
-                      ${campaign.status === 'active' ? 'bg-green-100 text-green-800' : 
-                        campaign.status === 'draft' ? 'bg-yellow-100 text-yellow-800' : 
-                          'bg-gray-100 text-gray-800'}`}>
-                      {campaign.status.charAt(0).toUpperCase() + campaign.status.slice(1)}
-                    </span>
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="pb-2">
-                  <div className="text-sm text-gray-500">
-                    {campaign.cohort_count} micro {campaign.cohort_count === 1 ? 'cohort' : 'cohorts'}
-                  </div>
-                </CardContent>
-                <CardFooter className="border-t pt-4 flex justify-end gap-3">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => navigate(`/campaign-review/${campaign.id}`)}
-                  >
-                    View
-                  </Button>
-                </CardFooter>
-              </Card>
-            ))}
-          </div>
+          <>
+            <StatsCards />
+            
+            <Card className="border-0 shadow-sm overflow-hidden">
+              <CardHeader className="bg-gray-50 py-4 px-6">
+                <CardTitle className="text-lg">Your Campaigns</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="hover:bg-gray-50">
+                      <TableHead className="font-medium">Campaign</TableHead>
+                      <TableHead className="font-medium">Status</TableHead>
+                      <TableHead className="font-medium">Created</TableHead>
+                      <TableHead className="font-medium">Cohorts</TableHead>
+                      <TableHead className="w-[100px]"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {campaigns.map((campaign) => (
+                      <TableRow 
+                        key={campaign.id} 
+                        className="hover:bg-gray-50 cursor-pointer"
+                        onClick={() => navigate(`/campaign-review/${campaign.id}`)}
+                      >
+                        <TableCell className="font-medium">{campaign.title}</TableCell>
+                        <TableCell>
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium 
+                            ${campaign.status === 'active' ? 'bg-green-100 text-green-800' : 
+                              campaign.status === 'draft' ? 'bg-yellow-100 text-yellow-800' : 
+                                'bg-gray-100 text-gray-800'}`}>
+                            {campaign.status.charAt(0).toUpperCase() + campaign.status.slice(1)}
+                          </span>
+                        </TableCell>
+                        <TableCell>{formatDate(campaign.created_at)}</TableCell>
+                        <TableCell>{campaign.cohort_count}</TableCell>
+                        <TableCell>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigate(`/campaign-review/${campaign.id}`);
+                            }}
+                          >
+                            <ArrowUpRight className="h-4 w-4" />
+                            <span className="sr-only">View</span>
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </>
         )}
       </div>
     </SidebarLayout>
