@@ -51,8 +51,7 @@ serve(async (req) => {
     console.log("Headline for overlay:", creative.headline);
     console.log("CTA for overlay:", creative.cta);
 
-    // Create the input for the Ideogram model
-    // Increase resolution to 1024x1024 for better quality
+    // Create the input for the Ideogram model with higher resolution
     const modelInput = {
       prompt: prompt,
       width: 1024,
@@ -64,11 +63,13 @@ serve(async (req) => {
     };
 
     // Add overlay text only if headline exists
+    // Make sure it's added using the correct parameter name
     if (creative.headline) {
       modelInput.overlay_text = creative.headline;
     }
 
     // Add button text only if CTA exists
+    // Make sure it's added using the correct parameter name
     if (creative.cta) {
       modelInput.button_text = creative.cta;
     }
