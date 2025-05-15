@@ -151,7 +151,7 @@ const Dashboard = () => {
             <div className="flex flex-col">
               <p className="text-sm text-gray-500">Total Cohorts</p>
               <p className="text-2xl font-semibold">
-                {campaigns.reduce((total, campaign) => total + campaign.cohort_count, a => 0)}
+                {campaigns.reduce((total, campaign) => total + campaign.cohort_count, 0)}
               </p>
             </div>
           </div>
