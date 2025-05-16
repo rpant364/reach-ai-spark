@@ -21,17 +21,24 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { brandGuidelinesSchema, BrandGuidelinesFormValues, defaultFormValues } from "./BrandGuidelinesSchema";
+import { useEffect } from "react";
 
 interface BrandGuidelinesFormProps {
   onSubmit: (values: BrandGuidelinesFormValues) => void;
   isLoading: boolean;
+  initialValues?: BrandGuidelinesFormValues;
 }
 
-const BrandGuidelinesForm = ({ onSubmit, isLoading }: BrandGuidelinesFormProps) => {
+const BrandGuidelinesForm = ({ onSubmit, isLoading, initialValues = defaultFormValues }: BrandGuidelinesFormProps) => {
   const form = useForm<BrandGuidelinesFormValues>({
     resolver: zodResolver(brandGuidelinesSchema),
-    defaultValues: defaultFormValues,
+    defaultValues: initialValues,
   });
+  
+  // Update form values when initialValues change
+  useEffect(() => {
+    form.reset(initialValues);
+  }, [initialValues, form]);
 
   return (
     <Form {...form}>
@@ -192,10 +199,10 @@ const BrandGuidelinesForm = ({ onSubmit, isLoading }: BrandGuidelinesFormProps) 
         
         <Button 
           type="submit" 
-          className="w-full bg-aviation-blue hover:bg-aviation-indigo" 
+          className="w-full bg-indigo-600 hover:bg-indigo-700" 
           disabled={isLoading}
         >
-          {isLoading ? "Saving..." : "Save & Continue"}
+          {isLoading ? "Saving..." : "Save Changes"}
         </Button>
       </form>
     </Form>
