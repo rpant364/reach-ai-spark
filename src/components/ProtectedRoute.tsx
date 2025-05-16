@@ -13,7 +13,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-pulse-subtle text-aviation-indigo">Loading...</div>
+        <div className="animate-pulse text-indigo-600">Loading...</div>
       </div>
     );
   }
@@ -28,12 +28,6 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
   if (!hasBrandGuidelines && location.pathname !== '/brand-guidelines') {
     console.log("Protected route: User hasn't completed brand guidelines, redirecting to brand guidelines");
     return <Navigate to="/brand-guidelines" replace />;
-  }
-  
-  // Special case: If user has completed brand guidelines and tries to access brand-guidelines page
-  if (hasBrandGuidelines && location.pathname === '/brand-guidelines') {
-    console.log("Protected route: User already has brand guidelines, redirecting to dashboard");
-    return <Navigate to="/dashboard" replace />;
   }
   
   // User is authenticated and has appropriate access

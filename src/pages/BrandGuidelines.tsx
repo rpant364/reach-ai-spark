@@ -1,23 +1,24 @@
 
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import SidebarLayout from "@/components/layouts/SidebarLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import BrandGuidelinesForm from "@/components/brand/BrandGuidelinesForm";
 import BrandPreview from "@/components/brand/BrandPreview";
-import { brandGuidelinesSchema, BrandGuidelinesFormValues, defaultFormValues } from "@/components/brand/BrandGuidelinesSchema";
+import { BrandGuidelinesFormValues, defaultFormValues } from "@/components/brand/BrandGuidelinesSchema";
 
 const BrandGuidelines = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, setHasBrandGuidelines } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [brandGuidelines, setBrandGuidelines] = useState<BrandGuidelinesFormValues>(defaultFormValues);
   const [isNewUser, setIsNewUser] = useState(true);
+  const [activeTab, setActiveTab] = useState("guidelines");
   
   // Fetch existing brand guidelines when component mounts
   useEffect(() => {
@@ -113,8 +114,11 @@ const BrandGuidelines = () => {
     }
   }
 
-  // If rendering inside SidebarLayout, wrap with it
-  if (window.location.pathname === '/brand-guidelines') {
+  // Check if rendering as a standalone page or within SidebarLayout
+  const isStandalonePage = location.pathname === '/brand-guidelines' && !user?.id;
+
+  // Inside SidebarLayout for authenticated users
+  if (!isStandalonePage) {
     return (
       <SidebarLayout>
         <div className="space-y-6">
@@ -125,7 +129,7 @@ const BrandGuidelines = () => {
             </p>
           </div>
           
-          <Tabs defaultValue="guidelines" className="space-y-4">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
             <TabsList>
               <TabsTrigger value="guidelines">Guidelines</TabsTrigger>
               <TabsTrigger value="preview">Preview</TabsTrigger>
